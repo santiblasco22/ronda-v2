@@ -16,32 +16,39 @@ export function GoogleSignInButton({
   onStart,
   onSuccess,
   onError,
+  onCancel,
   loading,
+  disabled,
 }: {
   onStart: () => void;
   onSuccess: () => void;
   onError: (message: string) => void;
+  onCancel?: () => void;
   loading: boolean;
+  disabled?: boolean;
 }) {
   if (!isGoogleAuthConfigured) {
-    return <UnconfiguredGoogleButton />;
+    return <UnconfiguredGoogleButton disabled={disabled} />;
   }
   return (
     <ConfiguredGoogleButton
       onStart={onStart}
       onSuccess={onSuccess}
       onError={onError}
+      onCancel={onCancel}
       loading={loading}
+      disabled={disabled}
     />
   );
 }
 
-function UnconfiguredGoogleButton() {
+function UnconfiguredGoogleButton({ disabled }: { disabled?: boolean }) {
   return (
     <Button
       label="Continuar con Google"
       variant="outline"
       icon="logo-google"
+      disabled={disabled}
       onPress={() =>
         Alert.alert(
           'Google no configurado',
@@ -56,14 +63,18 @@ function ConfiguredGoogleButton({
   onStart,
   onSuccess,
   onError,
+  onCancel,
   loading,
+  disabled,
 }: {
   onStart: () => void;
   onSuccess: () => void;
   onError: (message: string) => void;
+  onCancel?: () => void;
   loading: boolean;
+  disabled?: boolean;
 }) {
-  const { isReady, promptAsync } = useGoogleAuth(onSuccess, onError);
+  const { isReady, promptAsync } = useGoogleAuth(onSuccess, onError, onCancel);
 
   return (
     <Button
@@ -71,7 +82,7 @@ function ConfiguredGoogleButton({
       variant="outline"
       icon="logo-google"
       loading={loading}
-      disabled={!isReady}
+      disabled={disabled || !isReady}
       onPress={() => {
         onStart();
         void promptAsync();

@@ -46,8 +46,8 @@ export default function DiscoverScreen() {
       <ScreenHeader title="Descubrir" subtitle="Deslizá para guardar lo que te gusta" />
       {recordInteraction.isError ? (
         <Text style={styles.errorBanner}>
-          No pudimos guardar tu último swipe. Revisá tu conexión: al recargar puede volver a
-          aparecer esa prenda.
+          No pudimos guardar tu último swipe. La prenda volvió al mazo: revisá tu conexión y volvé
+          a intentar.
         </Text>
       ) : null}
       <ScrollView

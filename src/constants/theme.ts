@@ -40,6 +40,12 @@ export const HitSlop = {
   medium: { top: 12, bottom: 12, left: 12, right: 12 },
 } as const;
 
+/** Extra hitSlop so a visual control of `size` px still hits MIN_TOUCH_TARGET. */
+export function hitSlopForSize(size: number) {
+  const extra = Math.max(0, Math.ceil((MIN_TOUCH_TARGET - size) / 2));
+  return { top: extra, bottom: extra, left: extra, right: extra };
+}
+
 export const Typography = {
   /** Títulos de bienvenida / marca. */
   display: {
