@@ -3,6 +3,7 @@ import { StyleSheet, View, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Colors } from '@/constants/colors';
+import { Spacing } from '@/constants/theme';
 
 export function Screen({
   children,
@@ -15,7 +16,7 @@ export function Screen({
 }) {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <View style={[padded && styles.padded, style]}>{children}</View>
+      <View style={[styles.content, padded && styles.padded, style]}>{children}</View>
     </SafeAreaView>
   );
 }
@@ -25,8 +26,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  padded: {
+  content: {
     flex: 1,
-    paddingHorizontal: 16,
+  },
+  padded: {
+    paddingHorizontal: Spacing.lg,
   },
 });

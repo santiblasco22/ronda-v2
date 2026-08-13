@@ -1,52 +1,87 @@
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { Colors } from '@/constants/colors';
+import { Radius, Spacing, Typography } from '@/constants/theme';
+
+import { Button } from './Button';
+
+type Tone = 'neutral' | 'warning' | 'danger';
 
 export function EmptyState({
   icon = 'sparkles-outline',
   title,
   subtitle,
+  tone = 'neutral',
+  actionLabel,
+  onAction,
 }: {
   icon?: keyof typeof Ionicons.glyphMap;
   title: string;
   subtitle?: string;
+  tone?: Tone;
+  actionLabel?: string;
+  onAction?: () => void;
 }) {
+  const palette = TONES[tone];
+
   return (
     <View style={styles.container}>
-      <Ionicons name={icon} size={48} color={Colors.textMuted} />
+      <View style={[styles.iconCircle, { backgroundColor: palette.background }]}>
+        <Ionicons name={icon} size={30} color={palette.icon} />
+      </View>
       <Text style={styles.title}>{title}</Text>
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      {actionLabel && onAction ? (
+        <Button label={actionLabel} onPress={onAction} variant="outline" small style={styles.action} />
+      ) : null}
     </View>
   );
 }
 
-export function LoadingView() {
+export function LoadingView({ label = 'Cargando…' }: { label?: string }) {
   return (
-    <View style={styles.container}>
-      <Text style={styles.subtitle}>Cargando…</Text>
+    <View style={styles.container} accessibilityRole="progressbar" accessibilityLabel={label}>
+      <ActivityIndicator color={Colors.primaryInk} />
+      <Text style={styles.subtitle}>{label}</Text>
     </View>
   );
 }
+
+const TONES: Record<Tone, { background: string; icon: string }> = {
+  neutral: { background: Colors.primarySoft, icon: Colors.primaryInk },
+  warning: { background: Colors.primarySoft, icon: Colors.primaryInk },
+  danger: { background: Colors.dangerSoft, icon: Colors.dangerInk },
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 32,
-    gap: 8,
+    paddingHorizontal: Spacing.xxl,
+    paddingVertical: Spacing.xxl,
+    gap: Spacing.sm,
+  },
+  iconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.xs,
   },
   title: {
+    ...Typography.heading,
     fontSize: 17,
-    fontWeight: '700',
-    color: Colors.text,
     textAlign: 'center',
-    marginTop: 4,
   },
   subtitle: {
-    fontSize: 14,
-    color: Colors.textMuted,
+    ...Typography.caption,
     textAlign: 'center',
+    maxWidth: 320,
+  },
+  action: {
+    marginTop: Spacing.md,
   },
 });

@@ -11,10 +11,13 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { Colors } from '@/constants/colors';
+import { Radius, Spacing } from '@/constants/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.28;
+const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.26;
 const SWIPE_OUT_DURATION = 220;
+/** Devolver la carta al centro con un resorte corto: firme, sin rebote largo. */
+const RETURN_SPRING = { damping: 18, stiffness: 220, mass: 0.6 };
 
 export interface SwipeCardRef {
   swipeLeft: () => void;
@@ -26,19 +29,23 @@ interface SwipeCardProps {
   onSwipeLeft: () => void;
   onSwipeRight: () => void;
   disabled?: boolean;
+  /** Hay un swipe viajando al servidor: no se puede empezar otro gesto. */
+  isCommitting?: boolean;
   isTop: boolean;
+  /** Posición en el mazo: 0 es la carta de arriba. */
+  depth?: number;
 }
 
 export const SwipeCard = forwardRef<SwipeCardRef, SwipeCardProps>(function SwipeCard(
-  { children, onSwipeLeft, onSwipeRight, disabled, isTop },
+  { children, onSwipeLeft, onSwipeRight, disabled, isCommitting, isTop, depth = 0 },
   ref
 ) {
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   // La animación de salida se dispara una sola vez desde los botones: sin
   // esto, dos toques seguidos relanzan withTiming y su callback registra el
-  // swipe por duplicado. El gesto no necesita el candado porque al soltar la
-  // carta el mazo ya avanzó y la deshabilita.
+  // swipe por duplicado. El gesto también se apaga con disabled (isCommitting
+  // en la carta de arriba) para no largar otro swipe mientras viaja el anterior.
   const buttonSwipeFired = useRef(false);
 
   const finishSwipe = (direction: 'left' | 'right') => {
@@ -63,10 +70,10 @@ export const SwipeCard = forwardRef<SwipeCardRef, SwipeCardProps>(function Swipe
   }));
 
   const pan = Gesture.Pan()
-    .enabled(!disabled && isTop)
+    .enabled(!disabled && isTop && !isCommitting)
     .onUpdate((event) => {
       translateX.value = event.translationX;
-      translateY.value = event.translationY * 0.4;
+      translateY.value = event.translationY * 0.35;
     })
     .onEnd((event) => {
       if (event.translationX > SWIPE_THRESHOLD) {
@@ -74,27 +81,39 @@ export const SwipeCard = forwardRef<SwipeCardRef, SwipeCardProps>(function Swipe
       } else if (event.translationX < -SWIPE_THRESHOLD) {
         finishSwipe('left');
       } else {
-        translateX.value = withSpring(0);
-        translateY.value = withSpring(0);
+        translateX.value = withSpring(0, RETURN_SPRING);
+        translateY.value = withSpring(0, RETURN_SPRING);
       }
     });
 
+  // Las cartas de atrás quedan escalonadas: apenas más chicas y corridas
+  // hacia abajo, para que se lea que hay más prendas esperando.
   const cardStyle = useAnimatedStyle(() => {
-    const rotate = interpolate(translateX.value, [-SCREEN_WIDTH, 0, SCREEN_WIDTH], [-12, 0, 12]);
+    const rotate = interpolate(translateX.value, [-SCREEN_WIDTH, 0, SCREEN_WIDTH], [-11, 0, 11]);
     return {
       transform: [
         { translateX: translateX.value },
-        { translateY: translateY.value },
+        { translateY: translateY.value + depth * 10 },
         { rotate: `${rotate}deg` },
+        { scale: 1 - depth * 0.035 },
       ],
     };
   });
 
-  const likeOpacity = useAnimatedStyle(() => ({
+  const likeStampStyle = useAnimatedStyle(() => ({
     opacity: interpolate(translateX.value, [0, SWIPE_THRESHOLD], [0, 1], 'clamp'),
+    transform: [
+      { rotate: '-12deg' },
+      { scale: interpolate(translateX.value, [0, SWIPE_THRESHOLD], [0.85, 1], 'clamp') },
+    ],
   }));
-  const passOpacity = useAnimatedStyle(() => ({
+
+  const passStampStyle = useAnimatedStyle(() => ({
     opacity: interpolate(translateX.value, [-SWIPE_THRESHOLD, 0], [1, 0], 'clamp'),
+    transform: [
+      { rotate: '12deg' },
+      { scale: interpolate(translateX.value, [-SWIPE_THRESHOLD, 0], [1, 0.85], 'clamp') },
+    ],
   }));
 
   return (
@@ -103,10 +122,10 @@ export const SwipeCard = forwardRef<SwipeCardRef, SwipeCardProps>(function Swipe
         {children}
         {isTop ? (
           <>
-            <Animated.View style={[styles.stamp, styles.likeStamp, likeOpacity]}>
+            <Animated.View style={[styles.stamp, styles.likeStamp, likeStampStyle]}>
               <Text style={styles.likeText}>ME GUSTA</Text>
             </Animated.View>
-            <Animated.View style={[styles.stamp, styles.passStamp, passOpacity]}>
+            <Animated.View style={[styles.stamp, styles.passStamp, passStampStyle]}>
               <Text style={styles.passText}>PASO</Text>
             </Animated.View>
           </>
@@ -124,30 +143,31 @@ const styles = StyleSheet.create({
   },
   stamp: {
     position: 'absolute',
-    top: 28,
+    top: Spacing.xxl,
     borderWidth: 3,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    backgroundColor: 'rgba(255,255,255,0.92)',
   },
   likeStamp: {
-    left: 20,
+    left: Spacing.xl,
     borderColor: Colors.like,
-    transform: [{ rotate: '-14deg' }],
   },
   passStamp: {
-    right: 20,
+    right: Spacing.xl,
     borderColor: Colors.pass,
-    transform: [{ rotate: '14deg' }],
   },
   likeText: {
     color: Colors.like,
     fontWeight: '800',
     fontSize: 20,
+    letterSpacing: 0.5,
   },
   passText: {
     color: Colors.pass,
     fontWeight: '800',
     fontSize: 20,
+    letterSpacing: 0.5,
   },
 });

@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Colors } from '@/constants/colors';
+import { Radius, Spacing, Typography } from '@/constants/theme';
 import type { ListingStatus } from '@/types/models';
 
 const LABELS: Record<ListingStatus, string> = {
@@ -11,13 +12,13 @@ const LABELS: Record<ListingStatus, string> = {
 
 const BACKGROUNDS: Record<ListingStatus, string> = {
   active: Colors.primarySoft,
-  sold: '#DCEFE4',
-  archived: '#EDEAE3',
+  sold: Colors.successSoft,
+  archived: Colors.surfaceMuted,
 };
 
 const TEXT_COLORS: Record<ListingStatus, string> = {
-  active: Colors.primaryDark,
-  sold: Colors.accent,
+  active: Colors.primaryInk,
+  sold: Colors.successInk,
   archived: Colors.textMuted,
 };
 
@@ -31,7 +32,7 @@ export function StatusBadge({ status }: { status: ListingStatus }) {
 
 export function ProBadge() {
   return (
-    <View style={styles.proBadge}>
+    <View style={styles.proBadge} accessibilityLabel="Cuenta PRO">
       <Text style={styles.proLabel}>PRO</Text>
     </View>
   );
@@ -39,24 +40,27 @@ export function ProBadge() {
 
 const styles = StyleSheet.create({
   badge: {
-    borderRadius: 8,
-    paddingHorizontal: 8,
+    borderRadius: Radius.sm,
+    paddingHorizontal: Spacing.sm,
     paddingVertical: 3,
     alignSelf: 'flex-start',
   },
   label: {
-    fontSize: 11,
+    ...Typography.micro,
     fontWeight: '700',
   },
   proBadge: {
     backgroundColor: Colors.gold,
-    borderRadius: 6,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
+    borderRadius: Radius.sm - 2,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
   },
   proLabel: {
-    color: Colors.white,
+    // Tinta oscura sobre el dorado: en blanco el contraste era ~2:1.
+    color: Colors.text,
     fontSize: 10,
+    lineHeight: 12,
     fontWeight: '800',
+    letterSpacing: 0.3,
   },
 });

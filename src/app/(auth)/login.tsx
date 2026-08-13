@@ -1,13 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 import { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/Button';
+import { GoogleSignInButton } from '@/components/GoogleSignInButton';
 import { TextField } from '@/components/TextField';
 import { Colors } from '@/constants/colors';
+import { Radius, Shadows, Spacing, Typography } from '@/constants/theme';
 import { mapAuthError, signInWithEmail } from '@/features/auth/authApi';
-import { useGoogleAuth } from '@/features/auth/useGoogleAuth';
 import { validateEmail } from '@/utils/validators';
 
 export default function LoginScreen() {
@@ -15,14 +16,6 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const { isConfigured, isReady, promptAsync } = useGoogleAuth(
-    () => setLoading(false),
-    (message) => {
-      setLoading(false);
-      setError(message);
-    }
-  );
 
   async function handleLogin() {
     setError(null);
@@ -46,63 +39,60 @@ export default function LoginScreen() {
     }
   }
 
-  async function handleGoogle() {
-    setError(null);
-    if (!isConfigured) {
-      Alert.alert(
-        'Google no configurado',
-        'Agregá las variables EXPO_PUBLIC_GOOGLE_*_CLIENT_ID en tu archivo .env para habilitar el inicio de sesión con Google.'
-      );
-      return;
-    }
-    setLoading(true);
-    await promptAsync();
-  }
-
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <View style={styles.brand}>
           <View style={styles.logoCircle}>
-            <Ionicons name="shirt" size={36} color={Colors.white} />
+            <Ionicons name="shirt" size={38} color={Colors.textOnPrimary} />
           </View>
-          <Text style={styles.appName}>Ronda</Text>
+          <Text style={styles.appName} accessibilityRole="header">
+            Ronda
+          </Text>
           <Text style={styles.tagline}>Descubrí y dale una segunda vuelta a la ropa</Text>
         </View>
 
-        <TextField
-          label="Email"
-          placeholder="tu@email.com"
-          autoCapitalize="none"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
-        />
-        <TextField
-          label="Contraseña"
-          placeholder="••••••••"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <View style={styles.card}>
+          <TextField
+            label="Email"
+            placeholder="tu@email.com"
+            autoCapitalize="none"
+            autoComplete="email"
+            keyboardType="email-address"
+            value={email}
+            onChangeText={setEmail}
+          />
+          <TextField
+            label="Contraseña"
+            placeholder="••••••••"
+            secureTextEntry
+            autoComplete="current-password"
+            value={password}
+            onChangeText={setPassword}
+          />
+          {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <Button label="Iniciar sesión" onPress={handleLogin} loading={loading} style={styles.button} />
+          <Button label="Iniciar sesión" onPress={handleLogin} loading={loading} />
 
-        <View style={styles.dividerRow}>
-          <View style={styles.divider} />
-          <Text style={styles.dividerText}>o</Text>
-          <View style={styles.divider} />
+          <View style={styles.dividerRow}>
+            <View style={styles.divider} />
+            <Text style={styles.dividerText}>o</Text>
+            <View style={styles.divider} />
+          </View>
+
+          <GoogleSignInButton
+            loading={loading}
+            onStart={() => {
+              setError(null);
+              setLoading(true);
+            }}
+            onSuccess={() => setLoading(false)}
+            onError={(message) => {
+              setLoading(false);
+              setError(message);
+            }}
+          />
         </View>
-
-        <Button
-          label="Continuar con Google"
-          variant="outline"
-          onPress={handleGoogle}
-          loading={loading && isConfigured}
-          disabled={!isReady && isConfigured}
-          style={styles.button}
-        />
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>¿No tenés cuenta?</Text>
@@ -120,46 +110,53 @@ const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 40,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.xxxl,
   },
   brand: {
     alignItems: 'center',
-    marginBottom: 36,
+    marginBottom: Spacing.xxl,
   },
   logoCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 76,
+    height: 76,
+    borderRadius: Radius.pill,
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: Spacing.md,
+    ...Shadows.floating,
   },
   appName: {
-    fontSize: 30,
-    fontWeight: '800',
-    color: Colors.text,
+    ...Typography.display,
   },
   tagline: {
-    fontSize: 14,
-    color: Colors.textMuted,
-    marginTop: 4,
+    ...Typography.caption,
+    marginTop: Spacing.xs,
     textAlign: 'center',
+    maxWidth: 280,
   },
-  button: {
-    marginTop: 6,
+  card: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.xl,
+    ...Shadows.card,
   },
   error: {
-    color: Colors.danger,
-    fontSize: 13,
-    marginBottom: 10,
+    ...Typography.caption,
+    color: Colors.dangerInk,
+    backgroundColor: Colors.dangerSoft,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    marginBottom: Spacing.md,
   },
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginVertical: 20,
+    gap: Spacing.md,
+    marginVertical: Spacing.lg,
   },
   divider: {
     flex: 1,
@@ -167,22 +164,21 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.border,
   },
   dividerText: {
-    color: Colors.textMuted,
-    fontSize: 12,
+    ...Typography.micro,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 6,
-    marginTop: 28,
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.xxl,
   },
   footerText: {
-    color: Colors.textMuted,
-    fontSize: 14,
+    ...Typography.caption,
   },
   link: {
-    color: Colors.primary,
-    fontWeight: '700',
+    ...Typography.bodyStrong,
     fontSize: 14,
+    color: Colors.primaryInk,
   },
 });

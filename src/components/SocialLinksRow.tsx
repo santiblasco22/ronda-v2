@@ -2,8 +2,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Colors } from '@/constants/colors';
-import { buildFacebookUrl, buildInstagramUrl, buildWhatsAppUrl, defaultContactMessage, openExternalLink } from '@/utils/deepLinks';
+import { MIN_TOUCH_TARGET, Radius, Spacing } from '@/constants/theme';
 import type { SocialLinks } from '@/types/models';
+import {
+  buildFacebookUrl,
+  buildInstagramUrl,
+  buildWhatsAppUrl,
+  defaultContactMessage,
+  openExternalLink,
+} from '@/utils/deepLinks';
 
 export function SocialLinksRow({
   links,
@@ -20,47 +27,82 @@ export function SocialLinksRow({
   return (
     <View style={styles.row}>
       {links.instagram ? (
-        <Pressable
-          style={[styles.iconButton, { backgroundColor: Colors.instagram }]}
+        <SocialButton
+          icon="logo-instagram"
+          label="Abrir Instagram del vendedor"
+          color={Colors.instagram}
+          size={size}
           onPress={() => openExternalLink(buildInstagramUrl(links.instagram!))}
-        >
-          <Ionicons name="logo-instagram" size={size} color={Colors.white} />
-        </Pressable>
+        />
       ) : null}
       {links.whatsapp ? (
-        <Pressable
-          style={[styles.iconButton, { backgroundColor: Colors.whatsapp }]}
+        <SocialButton
+          icon="logo-whatsapp"
+          label="Escribir por WhatsApp al vendedor"
+          color={Colors.whatsapp}
+          size={size}
           onPress={() =>
             openExternalLink(
-              buildWhatsAppUrl(links.whatsapp!, contactContext ? defaultContactMessage(contactContext) : undefined)
+              buildWhatsAppUrl(
+                links.whatsapp!,
+                contactContext ? defaultContactMessage(contactContext) : undefined
+              )
             )
           }
-        >
-          <Ionicons name="logo-whatsapp" size={size} color={Colors.white} />
-        </Pressable>
+        />
       ) : null}
       {links.facebook ? (
-        <Pressable
-          style={[styles.iconButton, { backgroundColor: Colors.facebook }]}
+        <SocialButton
+          icon="logo-facebook"
+          label="Abrir Facebook del vendedor"
+          color={Colors.facebook}
+          size={size}
           onPress={() => openExternalLink(buildFacebookUrl(links.facebook!))}
-        >
-          <Ionicons name="logo-facebook" size={size} color={Colors.white} />
-        </Pressable>
+        />
       ) : null}
     </View>
+  );
+}
+
+function SocialButton({
+  icon,
+  label,
+  color,
+  size,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  color: string;
+  size: number;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.iconButton, { backgroundColor: color }, pressed && styles.pressed]}
+      onPress={onPress}
+      accessibilityRole="link"
+      accessibilityLabel={label}
+    >
+      <Ionicons name={icon} size={size} color={Colors.white} />
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
-    gap: 10,
+    gap: Spacing.md,
   },
   iconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: MIN_TOUCH_TARGET,
+    height: MIN_TOUCH_TARGET,
+    borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  pressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.96 }],
   },
 });

@@ -1,58 +1,25 @@
-import { Link, useLocalSearchParams } from 'expo-router';
-import { FlatList, Pressable, StyleSheet, Text } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
 
-import { Avatar } from '@/components/Avatar';
-import { EmptyState, LoadingView } from '@/components/EmptyState';
-import { Screen } from '@/components/Screen';
-import { Colors } from '@/constants/colors';
+import { UserList } from '@/components/UserList';
 import { useFollowing } from '@/features/users/useUserProfile';
+import { useAuthStore } from '@/store/authStore';
 
 export default function FollowingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const myUid = useAuthStore((s) => s.firebaseUid);
   const { data: following, isLoading } = useFollowing(id);
-
-  if (isLoading) return <LoadingView />;
+  const isMe = myUid === id;
 
   return (
-    <Screen padded={false}>
-      <FlatList
-        data={following ?? []}
-        keyExtractor={(item) => item.uid}
-        contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <Link href={{ pathname: '/user/[id]', params: { id: item.uid } }} asChild>
-            <Pressable style={styles.row}>
-              <Avatar url={item.avatarUrl} name={item.displayName} size={44} />
-              <Text style={styles.name}>{item.displayName}</Text>
-              <Text style={styles.username}>@{item.username}</Text>
-            </Pressable>
-          </Link>
-        )}
-        ListEmptyComponent={<EmptyState icon="people-outline" title="Todavía no sigue a nadie" />}
-      />
-    </Screen>
+    <UserList
+      users={following}
+      isLoading={isLoading}
+      emptyTitle={isMe ? 'Todavía no seguís a nadie' : 'Todavía no sigue a nadie'}
+      emptySubtitle={
+        isMe
+          ? 'Seguí vendedores desde Descubrir o Buscar para ver sus prendas nuevas en la pestaña Siguiendo.'
+          : undefined
+      }
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  list: {
-    padding: 16,
-    gap: 4,
-    flexGrow: 1,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 10,
-  },
-  name: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.text,
-  },
-  username: {
-    fontSize: 13,
-    color: Colors.textMuted,
-  },
-});

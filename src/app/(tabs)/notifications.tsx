@@ -4,7 +4,9 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { EmptyState, LoadingView } from '@/components/EmptyState';
 import { Screen } from '@/components/Screen';
+import { ScreenHeader } from '@/components/ScreenHeader';
 import { Colors } from '@/constants/colors';
+import { HitSlop, Radius, Spacing, Typography } from '@/constants/theme';
 import {
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
@@ -38,14 +40,22 @@ export default function NotificationsScreen() {
 
   return (
     <Screen padded={false}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Avisos</Text>
-        {unreadCount > 0 ? (
-          <Pressable onPress={() => notifications && markAllRead.mutate(notifications)}>
-            <Text style={styles.markAll}>Marcar todo como leído</Text>
-          </Pressable>
-        ) : null}
-      </View>
+      <ScreenHeader
+        title="Avisos"
+        subtitle={unreadCount > 0 ? `${unreadCount} sin leer` : undefined}
+        action={
+          unreadCount > 0 ? (
+            <Pressable
+              onPress={() => notifications && markAllRead.mutate(notifications)}
+              hitSlop={HitSlop.medium}
+              accessibilityRole="button"
+              accessibilityLabel="Marcar todos los avisos como leídos"
+            >
+              <Text style={styles.markAll}>Marcar todo</Text>
+            </Pressable>
+          ) : undefined
+        }
+      />
 
       {isLoading ? (
         <LoadingView />
@@ -56,11 +66,21 @@ export default function NotificationsScreen() {
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (
             <Pressable
-              style={[styles.item, !item.read && styles.itemUnread]}
+              style={({ pressed }) => [
+                styles.item,
+                !item.read && styles.itemUnread,
+                pressed && styles.itemPressed,
+              ]}
               onPress={() => handlePress(item)}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.read ? '' : 'Sin leer. '}${item.title}. ${item.body}`}
             >
-              <View style={styles.iconWrapper}>
-                <Ionicons name={ICONS[item.type] ?? 'notifications'} size={20} color={Colors.primaryDark} />
+              <View style={[styles.iconWrapper, !item.read && styles.iconWrapperUnread]}>
+                <Ionicons
+                  name={ICONS[item.type] ?? 'notifications'}
+                  size={18}
+                  color={Colors.primaryInk}
+                />
               </View>
               <View style={styles.itemBody}>
                 <Text style={styles.itemTitle}>{item.title}</Text>
@@ -74,7 +94,7 @@ export default function NotificationsScreen() {
             <EmptyState
               icon="notifications-outline"
               title="No tenés avisos todavía"
-              subtitle="Te avisaremos cuando alguien te siga o califique."
+              subtitle="Te avisamos cuando alguien empiece a seguirte o te deje una calificación."
             />
           }
         />
@@ -84,73 +104,65 @@ export default function NotificationsScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: Colors.text,
-  },
   markAll: {
-    fontSize: 12,
-    color: Colors.primary,
+    ...Typography.micro,
+    color: Colors.primaryInk,
     fontWeight: '700',
   },
   list: {
-    padding: 16,
-    gap: 10,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.xl,
+    gap: Spacing.md,
     flexGrow: 1,
   },
   item: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
+    gap: Spacing.md,
     backgroundColor: Colors.surface,
-    borderRadius: 14,
-    padding: 12,
+    borderRadius: Radius.lg,
+    padding: Spacing.lg,
     borderWidth: 1,
     borderColor: Colors.border,
   },
   itemUnread: {
     borderColor: Colors.primary,
+    backgroundColor: Colors.surface,
+  },
+  itemPressed: {
+    backgroundColor: Colors.primarySoft,
   },
   iconWrapper: {
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.primarySoft,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.surfaceMuted,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  iconWrapperUnread: {
+    backgroundColor: Colors.primarySoft,
   },
   itemBody: {
     flex: 1,
     gap: 2,
   },
   itemTitle: {
+    ...Typography.bodyStrong,
     fontSize: 14,
-    fontWeight: '700',
-    color: Colors.text,
   },
   itemBodyText: {
-    fontSize: 13,
-    color: Colors.textMuted,
+    ...Typography.caption,
   },
   itemDate: {
-    fontSize: 11,
-    color: Colors.textMuted,
+    ...Typography.micro,
     marginTop: 2,
   },
   dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 9,
+    height: 9,
+    borderRadius: Radius.pill,
     backgroundColor: Colors.primary,
-    marginTop: 6,
+    marginTop: Spacing.sm,
   },
 });

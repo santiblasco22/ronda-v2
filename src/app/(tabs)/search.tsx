@@ -16,7 +16,9 @@ import { Chip } from '@/components/Chip';
 import { EmptyState, LoadingView } from '@/components/EmptyState';
 import { ListingCard } from '@/components/ListingCard';
 import { Screen } from '@/components/Screen';
+import { ScreenHeader } from '@/components/ScreenHeader';
 import { Colors } from '@/constants/colors';
+import { HitSlop, MIN_TOUCH_TARGET, Radius, Spacing, Typography } from '@/constants/theme';
 import { useSearchListings } from '@/features/listings/useListings';
 import { useFiltersStore } from '@/store/filtersStore';
 import {
@@ -44,15 +46,19 @@ export default function SearchScreen() {
 
   const { data: results, isLoading } = useSearchListings(activeFilters);
 
-  const activeFilterCount = [filters.category, filters.size, filters.condition, filters.city || null, filters.maxPrice]
-    .filter(Boolean)
-    .length;
+  const activeFilterCount = [
+    filters.category,
+    filters.size,
+    filters.condition,
+    filters.city || null,
+    filters.maxPrice,
+  ].filter(Boolean).length;
+
+  const hasAnyCriteria = activeFilterCount > 0 || Boolean(filters.query.trim());
 
   return (
     <Screen padded={false}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Buscar</Text>
-      </View>
+      <ScreenHeader title="Buscar" />
 
       <View style={styles.searchRow}>
         <View style={styles.searchInputWrapper}>
@@ -63,10 +69,29 @@ export default function SearchScreen() {
             value={filters.query}
             onChangeText={filters.setQuery}
             style={styles.searchInput}
+            returnKeyType="search"
+            accessibilityLabel="Buscar prendas"
           />
+          {filters.query ? (
+            <Pressable
+              onPress={() => filters.setQuery('')}
+              hitSlop={HitSlop.small}
+              accessibilityRole="button"
+              accessibilityLabel="Borrar la búsqueda"
+            >
+              <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
+            </Pressable>
+          ) : null}
         </View>
-        <Pressable style={styles.filterButton} onPress={() => setModalVisible(true)}>
-          <Ionicons name="options-outline" size={20} color={Colors.primaryDark} />
+        <Pressable
+          style={({ pressed }) => [styles.filterButton, pressed && styles.filterButtonPressed]}
+          onPress={() => setModalVisible(true)}
+          accessibilityRole="button"
+          accessibilityLabel={
+            activeFilterCount > 0 ? `Filtros, ${activeFilterCount} activos` : 'Filtros'
+          }
+        >
+          <Ionicons name="options-outline" size={20} color={Colors.primaryInk} />
           {activeFilterCount > 0 ? (
             <View style={styles.filterBadge}>
               <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
@@ -75,23 +100,49 @@ export default function SearchScreen() {
         </Pressable>
       </View>
 
+      {activeFilterCount > 0 ? (
+        <View style={styles.activeFiltersRow}>
+          <Text style={styles.activeFiltersText}>
+            {activeFilterCount} {activeFilterCount === 1 ? 'filtro activo' : 'filtros activos'}
+          </Text>
+          <Pressable
+            onPress={filters.reset}
+            hitSlop={HitSlop.small}
+            accessibilityRole="button"
+            accessibilityLabel="Limpiar todos los filtros"
+          >
+            <Text style={styles.clearFilters}>Limpiar</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       {isLoading ? (
         <LoadingView />
       ) : (
         <FlatList
           data={results ?? []}
-          key={2}
           numColumns={2}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           columnWrapperStyle={styles.column}
+          keyboardShouldPersistTaps="handled"
           renderItem={({ item }: { item: Listing }) => <ListingCard listing={item} />}
           ListEmptyComponent={
-            <EmptyState
-              icon="pricetags-outline"
-              title="No encontramos publicaciones"
-              subtitle="Probá con otros filtros o palabras clave."
-            />
+            hasAnyCriteria ? (
+              <EmptyState
+                icon="search-outline"
+                title="No encontramos prendas con esos filtros"
+                subtitle="Probá con menos filtros, otra ciudad o un precio máximo más alto."
+                actionLabel="Limpiar filtros"
+                onAction={filters.reset}
+              />
+            ) : (
+              <EmptyState
+                icon="pricetags-outline"
+                title="Todavía no hay prendas publicadas"
+                subtitle="Cuando la comunidad empiece a publicar, vas a poder filtrar por categoría, talle, estado, ciudad y precio."
+              />
+            )
           }
         />
       )}
@@ -109,12 +160,19 @@ function FiltersModal({ visible, onClose }: { visible: boolean; onClose: () => v
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <Screen>
         <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Filtros</Text>
-          <Pressable onPress={onClose}>
+          <Text style={styles.modalTitle} accessibilityRole="header">
+            Filtros
+          </Text>
+          <Pressable
+            onPress={onClose}
+            hitSlop={HitSlop.medium}
+            accessibilityRole="button"
+            accessibilityLabel="Cerrar filtros"
+          >
             <Ionicons name="close" size={26} color={Colors.text} />
           </Pressable>
         </View>
-        <ScrollView>
+        <ScrollView showsVerticalScrollIndicator={false}>
           <Text style={styles.sectionLabel}>Categoría</Text>
           <View style={styles.chipsRow}>
             {LISTING_CATEGORIES.map((category) => (
@@ -158,6 +216,7 @@ function FiltersModal({ visible, onClose }: { visible: boolean; onClose: () => v
             value={filters.city}
             onChangeText={filters.setCity}
             style={styles.textInput}
+            accessibilityLabel="Filtrar por ciudad"
           />
 
           <Text style={styles.sectionLabel}>Precio máximo</Text>
@@ -172,12 +231,13 @@ function FiltersModal({ visible, onClose }: { visible: boolean; onClose: () => v
               filters.setMaxPrice(value && !Number.isNaN(parsed) ? parsed : null);
             }}
             style={styles.textInput}
+            accessibilityLabel="Filtrar por precio máximo"
           />
         </ScrollView>
 
         <View style={styles.modalFooter}>
           <Button
-            label="Limpiar filtros"
+            label="Limpiar"
             variant="ghost"
             onPress={() => {
               filters.reset();
@@ -192,103 +252,110 @@ function FiltersModal({ visible, onClose }: { visible: boolean; onClose: () => v
 }
 
 const styles = StyleSheet.create({
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: Colors.text,
-  },
   searchRow: {
     flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingBottom: 10,
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.md,
   },
   searchInputWrapper: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: Spacing.sm,
     backgroundColor: Colors.surface,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 12,
+    paddingHorizontal: Spacing.md,
   },
   searchInput: {
     flex: 1,
-    paddingVertical: 10,
-    fontSize: 14,
+    minHeight: MIN_TOUCH_TARGET,
+    paddingVertical: Spacing.sm,
+    fontSize: 15,
     color: Colors.text,
   },
   filterButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: MIN_TOUCH_TARGET,
+    height: MIN_TOUCH_TARGET,
+    borderRadius: Radius.md,
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  filterButtonPressed: {
+    backgroundColor: Colors.primarySoft,
   },
   filterBadge: {
     position: 'absolute',
     top: -4,
     right: -4,
     backgroundColor: Colors.primary,
-    borderRadius: 8,
-    minWidth: 16,
-    height: 16,
+    borderRadius: Radius.pill,
+    minWidth: 18,
+    height: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 3,
+    paddingHorizontal: 4,
   },
   filterBadgeText: {
-    color: Colors.white,
-    fontSize: 10,
+    color: Colors.textOnPrimary,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  activeFiltersRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.sm,
+  },
+  activeFiltersText: {
+    ...Typography.micro,
+  },
+  clearFilters: {
+    ...Typography.micro,
+    color: Colors.primaryInk,
     fontWeight: '700',
   },
   list: {
-    padding: 12,
+    padding: Spacing.lg,
+    gap: Spacing.lg,
     flexGrow: 1,
   },
   column: {
-    gap: 12,
+    gap: Spacing.lg,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingBottom: 16,
+    paddingVertical: Spacing.lg,
   },
   modalTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: Colors.text,
+    ...Typography.title,
   },
   sectionLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.text,
-    marginTop: 18,
-    marginBottom: 8,
+    ...Typography.sectionTitle,
+    marginTop: Spacing.xl,
+    marginBottom: Spacing.md,
   },
   chipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: Spacing.sm,
   },
   textInput: {
+    minHeight: MIN_TOUCH_TARGET,
     backgroundColor: Colors.surface,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
     fontSize: 15,
     color: Colors.text,
   },
@@ -296,8 +363,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 14,
-    gap: 10,
+    paddingVertical: Spacing.lg,
+    gap: Spacing.md,
   },
   applyButton: {
     flex: 1,
