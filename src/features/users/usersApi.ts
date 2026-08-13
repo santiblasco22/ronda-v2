@@ -13,6 +13,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 
+import { followNotificationId } from '@/features/notifications/notificationIds';
 import { db } from '@/lib/firebase';
 import type { FollowEdge, SocialLinks, UserProfile, UserStats } from '@/types/models';
 import { normalizeUsername } from '@/utils/validators';
@@ -179,6 +180,10 @@ export async function isFollowing(uid: string, targetUid: string): Promise<boole
  * Seguir escribe las dos puntas de la relación (y el aviso para la otra
  * persona) en un único batch: las reglas rechazan cualquiera de los tres
  * documentos por separado, así que no puede quedar una mitad huérfana.
+ *
+ * El aviso usa un id determinístico por emisor, de modo que seguir y dejar de
+ * seguir en loop reescribe siempre el mismo documento en vez de acumular
+ * avisos en la bandeja del otro.
  */
 export async function followUser(current: UserProfile, target: UserProfile): Promise<void> {
   const now = Date.now();
@@ -192,7 +197,7 @@ export async function followUser(current: UserProfile, target: UserProfile): Pro
     doc(db, 'users', target.uid, 'followers', current.uid),
     followEdgeFor(current, now)
   );
-  batch.set(doc(collection(db, 'users', target.uid, 'notifications')), {
+  batch.set(doc(db, 'users', target.uid, 'notifications', followNotificationId(current.uid)), {
     type: 'new_follower',
     title: 'Nuevo seguidor',
     body: `${current.displayName} (@${current.username}) empezó a seguirte.`,
@@ -204,6 +209,10 @@ export async function followUser(current: UserProfile, target: UserProfile): Pro
   await batch.commit();
 }
 
+/**
+ * Dejar de seguir borra las dos puntas juntas: las reglas no permiten borrar
+ * una sola (quedaría un seguidor fantasma contando en el perfil ajeno).
+ */
 export async function unfollowUser(currentUid: string, targetUid: string): Promise<void> {
   const batch = writeBatch(db);
   batch.delete(doc(db, 'users', currentUid, 'following', targetUid));

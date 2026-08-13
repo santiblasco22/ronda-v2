@@ -225,7 +225,10 @@ service cloud.firestore {
 
       // ------------------ following ------------------
       // Solo el dueño administra su lista de "a quién sigo", y siempre en el
-      // mismo write que el registro espejo en followers del otro usuario.
+      // mismo write que el registro espejo en followers del otro usuario:
+      // tanto al seguir como al dejar de seguir. Si solo se pudiera borrar una
+      // punta, quedarían seguidores fantasma inflando el contador del otro
+      // perfil (que se calcula justamente contando esa subcolección).
       match /following/{targetId} {
         allow read: if isSignedIn();
 
@@ -234,7 +237,9 @@ service cloud.firestore {
           && request.resource.data.uid == targetId
           && getAfter(followerPath(targetId, userId)).data.uid == userId;
 
-        allow delete: if isOwner(userId);
+        allow delete: if isOwner(userId)
+          && !existsAfter(followerPath(targetId, userId));
+
         allow update: if false;
       }
 
@@ -249,7 +254,9 @@ service cloud.firestore {
           && request.resource.data.uid == followerId
           && getAfter(followingPath(followerId, userId)).data.uid == userId;
 
-        allow delete: if isOwner(followerId);
+        allow delete: if isOwner(followerId)
+          && !existsAfter(followingPath(followerId, userId));
+
         allow update: if false;
       }
 
@@ -267,15 +274,32 @@ service cloud.firestore {
       }
 
       // ------------------ notifications ------------------
+      // El id de cada aviso es determinístico y depende de quién lo manda:
+      // "new_follower__{actorUid}" / "new_rating__{raterId}". Como un batch no
+      // puede escribir dos veces el mismo documento, el emisor no puede
+      // generar más de un aviso por tipo, ni siquiera metiendo N documentos en
+      // el mismo write.
       match /notifications/{notificationId} {
+        function validNotificationShape() {
+          return request.resource.data.read == false
+            && request.resource.data.createdAt is number
+            && request.resource.data.title is string
+            && request.resource.data.title.size() <= 80
+            && request.resource.data.body is string
+            && request.resource.data.body.size() <= 200
+            && request.resource.data.data.uid == uid();
+        }
+
         function notifiesRealFollow() {
-          return request.resource.data.type == 'new_follower'
+          return notificationId == 'new_follower__' + uid()
+            && request.resource.data.type == 'new_follower'
             && !exists(followerPath(userId, uid()))
             && getAfter(followerPath(userId, uid())).data.uid == uid();
         }
 
         function notifiesRealRating() {
-          return request.resource.data.type == 'new_rating'
+          return notificationId == 'new_rating__' + uid()
+            && request.resource.data.type == 'new_rating'
             && !exists(ratingPath(ratingIdFor(uid(), userId)))
             && getAfter(ratingPath(ratingIdFor(uid(), userId))).data.ratedUserId == userId;
         }
@@ -288,19 +312,26 @@ service cloud.firestore {
         // de administrador (ver README).
         allow create: if isSignedIn()
           && userId != uid()
-          && request.resource.data.read == false
-          && request.resource.data.createdAt is number
-          && request.resource.data.title is string
-          && request.resource.data.title.size() <= 80
-          && request.resource.data.body is string
-          && request.resource.data.body.size() <= 200
-          && request.resource.data.data.uid == uid()
+          && validNotificationShape()
           && (notifiesRealFollow() || notifiesRealRating());
 
-        // El dueño solo puede marcarla como leída.
-        allow update: if isOwner(userId)
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
-          && request.resource.data.read == true;
+        allow update: if
+          // El dueño solo puede marcarla como leída.
+          (
+            isOwner(userId)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+            && request.resource.data.read == true
+          )
+          // Volver a seguir después de un unfollow reescribe ese mismo aviso.
+          // Sigue haciendo falta que el follow ocurra en este write y que
+          // antes no fuera seguidor, así que sigue siendo un aviso por ciclo
+          // de seguir/dejar de seguir, nunca uno nuevo.
+          || (
+            isSignedIn()
+            && userId != uid()
+            && validNotificationShape()
+            && notifiesRealFollow()
+          );
       }
     }
 
@@ -339,8 +370,18 @@ service cloud.firestore {
           && userAfter(uid()).lastListingOpId == listingId;
       }
 
+      /**
+       * El cupo del plan cuenta publicaciones activas, así que solo importa
+       * cuando el estado cruza la frontera activa/no activa. Pasar de vendida
+       * a archivada (o al revés) no mueve el cupo y no necesita —ni admite—
+       * tocar el contador.
+       */
+      function crossesActiveBoundary() {
+        return (resource.data.status == 'active') != (request.resource.data.status == 'active');
+      }
+
       function statusChangeIsPaired() {
-        return resource.data.status == request.resource.data.status
+        return !crossesActiveBoundary()
           || (
             userAfter(uid()).lastListingOpId == listingId
             && userAfter(uid()).activeListingCount ==

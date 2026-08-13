@@ -1,5 +1,6 @@
 import { collection, doc, getDoc, getDocs, orderBy, query, where, writeBatch } from 'firebase/firestore';
 
+import { ratingNotificationId } from '@/features/notifications/notificationIds';
 import { db } from '@/lib/firebase';
 import type { Rating, UserProfile } from '@/types/models';
 
@@ -70,7 +71,7 @@ export async function createRating(rater: UserProfile, input: CreateRatingInput)
     comment: input.comment.trim(),
     createdAt: now,
   });
-  batch.set(doc(collection(db, 'users', input.ratedUserId, 'notifications')), {
+  batch.set(doc(db, 'users', input.ratedUserId, 'notifications', ratingNotificationId(rater.uid)), {
     type: 'new_rating',
     title: 'Nueva calificación',
     body: `${rater.displayName} te dejó ${input.stars} ${input.stars === 1 ? 'estrella' : 'estrellas'}.`,

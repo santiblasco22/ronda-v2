@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { after, before, beforeEach, describe, it } from 'node:test';
 
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { deleteDoc, doc, getDoc, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 
 import { createTestEnv, listingDoc, seed, userDoc } from './helpers.mjs';
 
@@ -329,6 +329,39 @@ describe('listings: edición, estado y borrado', () => {
     await assertFails(overCap.commit());
   });
 
+  it('permite mover una publicación entre vendida y archivada sin tocar el contador', async () => {
+    await seed(testEnv, [
+      ['users/alice', userDoc('alice', { activeListingCount: 2 })],
+      ['listings/vendida', listingDoc('alice', { status: 'sold' })],
+      ['listings/archivada', listingDoc('alice', { status: 'archived' })],
+    ]);
+    const client = db('alice');
+
+    // Ninguno de los dos estados ocupa cupo, así que el cambio no mueve el
+    // contador y no necesita ir acompañado de nada.
+    await assertSucceeds(
+      updateDoc(doc(client, 'listings', 'vendida'), { status: 'archived', updatedAt: 2 })
+    );
+    await assertSucceeds(
+      updateDoc(doc(client, 'listings', 'archivada'), { status: 'sold', updatedAt: 2 })
+    );
+  });
+
+  it('rechaza mover el cupo en un cambio de estado que no cruza la frontera activa', async () => {
+    await seed(testEnv, [
+      ['users/alice', userDoc('alice', { activeListingCount: 2 })],
+      ['listings/vendida', listingDoc('alice', { status: 'sold' })],
+    ]);
+    const client = db('alice');
+    const batch = writeBatch(client);
+    batch.update(doc(client, 'listings', 'vendida'), { status: 'archived', updatedAt: 2 });
+    batch.update(doc(client, 'users', 'alice'), {
+      activeListingCount: 1,
+      lastListingOpId: 'vendida',
+    });
+    await assertFails(batch.commit());
+  });
+
   it('solo permite borrar publicaciones que no estén activas', async () => {
     await seed(testEnv, [
       ['users/alice', userDoc('alice', { activeListingCount: 1 })],
@@ -435,6 +468,34 @@ describe('follows simétricos', () => {
     batch.set(doc(client, 'users', 'alice', 'followers', 'carol'), { uid: 'carol', createdAt: 1 });
     await assertFails(batch.commit());
   });
+
+  it('permite dejar de seguir borrando las dos puntas juntas', async () => {
+    await seedUsers('alice', 'bob');
+    await assertSucceeds(followBatch(db('bob'), 'bob', 'alice').commit());
+
+    const client = db('bob');
+    const batch = writeBatch(client);
+    batch.delete(doc(client, 'users', 'bob', 'following', 'alice'));
+    batch.delete(doc(client, 'users', 'alice', 'followers', 'bob'));
+    await assertSucceeds(batch.commit());
+  });
+
+  it('rechaza dejar de seguir una sola punta (dejaría un seguidor fantasma)', async () => {
+    await seedUsers('alice', 'bob');
+    await assertSucceeds(followBatch(db('bob'), 'bob', 'alice').commit());
+
+    const client = db('bob');
+    await assertFails(deleteDoc(doc(client, 'users', 'bob', 'following', 'alice')));
+    await assertFails(deleteDoc(doc(client, 'users', 'alice', 'followers', 'bob')));
+  });
+
+  it('deja limpiar una punta huérfana si la otra ya no existe', async () => {
+    await seedUsers('alice', 'bob');
+    await seed(testEnv, [
+      ['users/alice/followers/bob', { uid: 'bob', username: 'bob', createdAt: 1 }],
+    ]);
+    await assertSucceeds(deleteDoc(doc(db('bob'), 'users', 'alice', 'followers', 'bob')));
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -515,11 +576,41 @@ describe('notificaciones no falsificables', () => {
     ...overrides,
   });
 
+  const FOLLOW_ID = 'new_follower__bob';
+  const RATING_ID = 'new_rating__bob';
+
+  const ratingData = {
+    raterId: 'bob',
+    raterUsername: 'bob',
+    raterDisplayName: 'Usuario bob',
+    raterAvatarUrl: null,
+    ratedUserId: 'alice',
+    listingId: null,
+    listingTitle: null,
+    stars: 4,
+    comment: '',
+    createdAt: 1700000005000,
+  };
+
+  /** Batch de "seguir", opcionalmente con los avisos que se quieran probar. */
+  function followWithNotifications(client, notificationIds) {
+    const batch = writeBatch(client);
+    batch.set(doc(client, 'users', 'bob', 'following', 'alice'), { uid: 'alice', createdAt: 1 });
+    batch.set(doc(client, 'users', 'alice', 'followers', 'bob'), { uid: 'bob', createdAt: 1 });
+    for (const id of notificationIds) {
+      batch.set(
+        doc(client, 'users', 'alice', 'notifications', id),
+        notification('new_follower', 'bob')
+      );
+    }
+    return batch;
+  }
+
   it('rechaza notificaciones sueltas', async () => {
     await seedUsers('alice', 'bob');
     await assertFails(
       setDoc(
-        doc(db('bob'), 'users', 'alice', 'notifications', 'n1'),
+        doc(db('bob'), 'users', 'alice', 'notifications', FOLLOW_ID),
         notification('new_follower', 'bob')
       )
     );
@@ -528,45 +619,81 @@ describe('notificaciones no falsificables', () => {
   it('acepta la notificación que acompaña a un follow real', async () => {
     await seedUsers('alice', 'bob');
     const client = db('bob');
-    const batch = writeBatch(client);
-    batch.set(doc(client, 'users', 'bob', 'following', 'alice'), { uid: 'alice', createdAt: 1 });
-    batch.set(doc(client, 'users', 'alice', 'followers', 'bob'), { uid: 'bob', createdAt: 1 });
-    batch.set(
-      doc(client, 'users', 'alice', 'notifications', 'n1'),
-      notification('new_follower', 'bob')
-    );
-    await assertSucceeds(batch.commit());
+    await assertSucceeds(followWithNotifications(client, [FOLLOW_ID]).commit());
 
     // Ya siendo seguidor, no puede seguir generando avisos.
     await assertFails(
       setDoc(
-        doc(client, 'users', 'alice', 'notifications', 'n2'),
+        doc(client, 'users', 'alice', 'notifications', FOLLOW_ID),
         notification('new_follower', 'bob')
       )
     );
+  });
+
+  it('exige el id determinístico del emisor', async () => {
+    await seedUsers('alice', 'bob');
+    await assertFails(followWithNotifications(db('bob'), ['n1']).commit());
+    await assertFails(followWithNotifications(db('bob'), ['new_follower__carol']).commit());
+  });
+
+  it('no deja llenar la bandeja con varios avisos en el mismo batch', async () => {
+    await seedUsers('alice', 'bob');
+    // El id fijo ya impide repetir el documento; cualquier id extra que se
+    // cuele en el mismo write tiene que hacer fallar todo el batch.
+    await assertFails(
+      followWithNotifications(db('bob'), [FOLLOW_ID, `${FOLLOW_ID}__2`, 'spam-3']).commit()
+    );
+
+    let notificationCount = null;
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const snap = await getDocs(collection(ctx.firestore(), 'users', 'alice', 'notifications'));
+      notificationCount = snap.size;
+    });
+    assert.equal(notificationCount, 0);
+  });
+
+  it('reescribe el mismo aviso al volver a seguir en vez de acumular', async () => {
+    await seedUsers('alice', 'bob');
+    const client = db('bob');
+    await assertSucceeds(followWithNotifications(client, [FOLLOW_ID]).commit());
+
+    const unfollow = writeBatch(client);
+    unfollow.delete(doc(client, 'users', 'bob', 'following', 'alice'));
+    unfollow.delete(doc(client, 'users', 'alice', 'followers', 'bob'));
+    await assertSucceeds(unfollow.commit());
+
+    await assertSucceeds(followWithNotifications(client, [FOLLOW_ID]).commit());
+
+    let notificationCount = null;
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const snap = await getDocs(collection(ctx.firestore(), 'users', 'alice', 'notifications'));
+      notificationCount = snap.size;
+    });
+    assert.equal(notificationCount, 1);
   });
 
   it('acepta la notificación que acompaña a una calificación real', async () => {
     await seedUsers('alice', 'bob');
     const client = db('bob');
     const batch = writeBatch(client);
-    batch.set(doc(client, 'ratings', 'bob__alice'), {
-      raterId: 'bob',
-      raterUsername: 'bob',
-      raterDisplayName: 'Usuario bob',
-      raterAvatarUrl: null,
-      ratedUserId: 'alice',
-      listingId: null,
-      listingTitle: null,
-      stars: 4,
-      comment: '',
-      createdAt: 1700000005000,
-    });
+    batch.set(doc(client, 'ratings', 'bob__alice'), ratingData);
     batch.set(
-      doc(client, 'users', 'alice', 'notifications', 'n1'),
+      doc(client, 'users', 'alice', 'notifications', RATING_ID),
       notification('new_rating', 'bob', { title: 'Nueva calificación' })
     );
     await assertSucceeds(batch.commit());
+  });
+
+  it('rechaza avisos de calificación con id ajeno al emisor', async () => {
+    await seedUsers('alice', 'bob');
+    const client = db('bob');
+    const batch = writeBatch(client);
+    batch.set(doc(client, 'ratings', 'bob__alice'), ratingData);
+    batch.set(
+      doc(client, 'users', 'alice', 'notifications', 'new_rating__carol'),
+      notification('new_rating', 'bob', { title: 'Nueva calificación' })
+    );
+    await assertFails(batch.commit());
   });
 
   it('rechaza suplantar a otro usuario como autor del aviso', async () => {
@@ -576,7 +703,7 @@ describe('notificaciones no falsificables', () => {
     batch.set(doc(client, 'users', 'bob', 'following', 'alice'), { uid: 'alice', createdAt: 1 });
     batch.set(doc(client, 'users', 'alice', 'followers', 'bob'), { uid: 'bob', createdAt: 1 });
     batch.set(
-      doc(client, 'users', 'alice', 'notifications', 'n1'),
+      doc(client, 'users', 'alice', 'notifications', FOLLOW_ID),
       notification('new_follower', 'carol')
     );
     await assertFails(batch.commit());
@@ -586,7 +713,7 @@ describe('notificaciones no falsificables', () => {
     await seedUsers('alice');
     await assertFails(
       setDoc(
-        doc(db('alice'), 'users', 'alice', 'notifications', 'n1'),
+        doc(db('alice'), 'users', 'alice', 'notifications', 'new_follower__alice'),
         notification('pro_request_approved', 'alice', { title: 'Sos PRO' })
       )
     );
@@ -595,15 +722,14 @@ describe('notificaciones no falsificables', () => {
   it('solo deja al dueño marcarla como leída', async () => {
     await seedUsers('alice', 'bob');
     await seed(testEnv, [
-      ['users/alice/notifications/n1', notification('new_follower', 'bob')],
+      [`users/alice/notifications/${FOLLOW_ID}`, notification('new_follower', 'bob')],
     ]);
-    await assertFails(updateDoc(doc(db('bob'), 'users', 'alice', 'notifications', 'n1'), { read: true }));
-    await assertSucceeds(
-      updateDoc(doc(db('alice'), 'users', 'alice', 'notifications', 'n1'), { read: true })
-    );
-    await assertFails(
-      updateDoc(doc(db('alice'), 'users', 'alice', 'notifications', 'n1'), { body: 'otro' })
-    );
+    const path = ['users', 'alice', 'notifications', FOLLOW_ID];
+    // bob ya es "seguidor" solo en el aviso sembrado: sin un follow nuevo en
+    // este write no puede reescribirlo.
+    await assertFails(updateDoc(doc(db('bob'), ...path), { read: true }));
+    await assertSucceeds(updateDoc(doc(db('alice'), ...path), { read: true }));
+    await assertFails(updateDoc(doc(db('alice'), ...path), { body: 'otro' }));
   });
 });
 

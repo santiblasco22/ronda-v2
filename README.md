@@ -143,6 +143,8 @@ usernames/{usernameLower}                → { uid, createdAt }
   users/{uid}/followers/{followerUid}    → { uid, username, displayName, avatarUrl, createdAt }
   users/{uid}/interactions/{listingId}   → { listingId, action: 'like'|'pass', createdAt }
   users/{uid}/notifications/{id}         → { type, title, body, read, createdAt, data? }
+    id determinístico por emisor: "new_follower__{actorUid}" /
+    "new_rating__{raterId}" (ver src/features/notifications/notificationIds.ts)
 
 listings/{listingId}
   sellerId,
@@ -185,7 +187,9 @@ un test en `tests/rules/firestore.test.mjs` (`npm run test:rules`):
   (`get()`) y después (`getAfter()`) del write, así que el mismo id no
   sirve dos veces para descontar cupo. Como una publicación activa no se
   puede borrar (hay que archivarla primero), no existe forma de bajar el
-  contador sin dejar rastro.
+  contador sin dejar rastro. Los cambios de estado que **no** cruzan la
+  frontera activa/no activa (vendida ↔ archivada) no mueven el cupo, y las
+  reglas tampoco los dejan moverlo.
 - **Identidad no suplantable.** Los campos denormalizados (`seller*` en
   listings, `rater*` en ratings, `user*` en solicitudes PRO) se validan
   contra `users/{uid}`: no se puede publicar a nombre de otra persona ni
@@ -198,13 +202,18 @@ un test en `tests/rules/firestore.test.mjs` (`npm run test:rules`):
 - **Una calificación por par de usuarios.** El id de `ratings` es
   `{raterId}__{ratedUserId}` y solo se permite `create`, así que la unicidad
   la impone Firestore. Tampoco se pueden editar ni borrar.
-- **Follows simétricos.** `users/A/following/B` y `users/B/followers/A` se
-  crean en el mismo write o no se crea ninguno, y nadie puede agregarse
-  seguidores ajenos.
-- **Notificaciones no forjables.** Solo se pueden crear como efecto de una
-  acción real verificable en el mismo write (empezar a seguir o calificar),
-  con `data.uid` == quien la manda. Los avisos de cuenta PRO no se pueden
-  emitir desde el cliente.
+- **Follows simétricos en las dos direcciones.** `users/A/following/B` y
+  `users/B/followers/A` se crean —y se borran— en el mismo write, o no pasa
+  nada: no se puede dejar una punta huérfana inflando el contador de
+  seguidores del otro perfil. Nadie puede agregarse seguidores ajenos.
+- **Notificaciones no forjables ni spameables.** Solo se pueden crear como
+  efecto de una acción real verificable en el mismo write (empezar a seguir o
+  calificar), con `data.uid` == quien la manda. Además el id es
+  determinístico y depende del emisor (`new_follower__{uid}` /
+  `new_rating__{uid}`), así que una persona no puede acumular avisos en la
+  bandeja de otra: seguir y dejar de seguir en loop reescribe siempre el
+  mismo documento, y tampoco sirve meter varios avisos en un mismo batch.
+  Los avisos de cuenta PRO no se pueden emitir desde el cliente.
 - **Nombre de usuario único.** Se reserva en `usernames/{usernameLower}`
   dentro del mismo batch que el alta del perfil.
 
@@ -347,7 +356,9 @@ real conectado (dos cuentas de prueba ayudan a probar follow/rating):
     reflejarse en el detalle.
 14. Cambiar el estado a "Vendido" y a "Archivado" → debe desaparecer de
     Descubrir/Buscar (ambos solo muestran `active`) y el contador
-    `activeListingCount` debe bajar.
+    `activeListingCount` debe bajar. Pasar después de "Vendido" a
+    "Archivado" (y al revés) tiene que funcionar sin volver a mover el
+    contador, porque ninguno de los dos ocupa cupo.
 15. Alcanzar el límite de publicaciones activas (15 en cuenta gratuita) →
     "Publicar" debe bloquearse con un aviso, hasta archivar/vender alguna o
     pedir cuenta PRO. El tope también lo aplican las reglas: aunque se fuerce
@@ -399,6 +410,10 @@ real conectado (dos cuentas de prueba ayudan a probar follow/rating):
 25. Generar una notificación (seguir a alguien, calificarlo) desde otra
     cuenta → debe aparecer en "Avisos" con el badge de no leído en la tab, y
     marcarse como leída al abrirla.
+25b. Seguir y dejar de seguir varias veces desde la otra cuenta → tiene que
+    quedar **un solo** aviso de "nuevo seguidor" (se reescribe), no uno por
+    cada vez. Y al dejar de seguir, el perfil no puede quedar con el
+    seguidor contado de más.
 
 ### Rutas protegidas
 
