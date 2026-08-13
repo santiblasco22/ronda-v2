@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Tabs } from 'expo-router';
 
 import { Colors } from '@/constants/colors';
+import { Typography } from '@/constants/theme';
 import { useNotifications } from '@/features/notifications/useNotifications';
 import { useAuthStore } from '@/store/authStore';
 
@@ -22,9 +23,20 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: Colors.primary,
+        tabBarActiveTintColor: Colors.primaryInk,
         tabBarInactiveTintColor: Colors.textMuted,
-        tabBarStyle: { backgroundColor: Colors.surface, borderTopColor: Colors.border },
+        tabBarStyle: {
+          backgroundColor: Colors.surface,
+          borderTopColor: Colors.border,
+          paddingTop: 4,
+        },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: Typography.micro.fontWeight },
+        tabBarBadgeStyle: {
+          backgroundColor: Colors.primary,
+          color: Colors.textOnPrimary,
+          fontSize: 11,
+          fontWeight: '800',
+        },
       }}
     >
       <Tabs.Screen

@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter } from 'expo-router';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -8,15 +7,19 @@ import { EmptyState } from '@/components/EmptyState';
 import { ListingCard } from '@/components/ListingCard';
 import { RatingStars } from '@/components/RatingStars';
 import { Screen } from '@/components/Screen';
-import { ProBadge } from '@/components/StatusBadge';
+import { HeaderIconButton, ScreenHeader } from '@/components/ScreenHeader';
 import { SocialLinksRow } from '@/components/SocialLinksRow';
+import { ProBadge } from '@/components/StatusBadge';
 import { Colors } from '@/constants/colors';
 import { getListingCapFor } from '@/constants/limits';
+import { HitSlop, Radius, Shadows, Spacing, Typography } from '@/constants/theme';
 import { signOut } from '@/features/auth/authApi';
 import { useMyListings } from '@/features/listings/useListings';
 import { useLatestProRequest } from '@/features/pro/useProRequest';
 import { useUserStats } from '@/features/users/useUserProfile';
 import { useAuthStore } from '@/store/authStore';
+
+const PREVIEW_LISTINGS = 4;
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -28,19 +31,24 @@ export default function ProfileScreen() {
   if (!profile) return null;
 
   const cap = getListingCapFor(profile.isPro);
-  const activeListings = (listings ?? []).filter((l) => l.status === 'active').slice(0, 6);
+  const activeListings = (listings ?? []).filter((l) => l.status === 'active');
+  const preview = activeListings.slice(0, PREVIEW_LISTINGS);
+  const remainingSlots = Math.max(cap - profile.activeListingCount, 0);
+  const hasSocialLinks = Boolean(
+    profile.socialLinks.instagram || profile.socialLinks.whatsapp || profile.socialLinks.facebook
+  );
 
   return (
     <Screen padded={false}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.headerRow}>
-          <Text style={styles.headerTitle}>Perfil</Text>
-          <Pressable onPress={() => signOut()}>
-            <Ionicons name="log-out-outline" size={24} color={Colors.textMuted} />
-          </Pressable>
-        </View>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <ScreenHeader
+          title="Perfil"
+          action={
+            <HeaderIconButton icon="log-out-outline" label="Cerrar sesión" onPress={() => signOut()} />
+          }
+        />
 
-        <View style={styles.profileCard}>
+        <View style={styles.card}>
           <Avatar url={profile.avatarUrl} name={profile.displayName} size={84} />
           <View style={styles.nameRow}>
             <Text style={styles.displayName}>{profile.displayName}</Text>
@@ -54,63 +62,111 @@ export default function ProfileScreen() {
 
           <View style={styles.statsRow}>
             <Link href={{ pathname: '/followers/[id]', params: { id: profile.uid } }} asChild>
-              <Pressable style={styles.stat} accessibilityRole="button">
+              <Pressable
+                style={styles.stat}
+                hitSlop={HitSlop.small}
+                accessibilityRole="button"
+                accessibilityLabel={`Ver seguidores: ${formatCount(stats?.followers)}`}
+              >
                 <Text style={styles.statNumber}>{formatCount(stats?.followers)}</Text>
                 <Text style={styles.statLabel}>Seguidores</Text>
               </Pressable>
             </Link>
+            <View style={styles.statDivider} />
             <Link href={{ pathname: '/following/[id]', params: { id: profile.uid } }} asChild>
-              <Pressable style={styles.stat} accessibilityRole="button">
+              <Pressable
+                style={styles.stat}
+                hitSlop={HitSlop.small}
+                accessibilityRole="button"
+                accessibilityLabel={`Ver a quién seguís: ${formatCount(stats?.following)}`}
+              >
                 <Text style={styles.statNumber}>{formatCount(stats?.following)}</Text>
                 <Text style={styles.statLabel}>Siguiendo</Text>
               </Pressable>
             </Link>
+            <View style={styles.statDivider} />
             <View style={styles.stat}>
               <Text style={styles.statNumber}>
-                {profile.activeListingCount}/{cap}
+                {profile.activeListingCount}
+                <Text style={styles.statNumberMuted}>/{cap}</Text>
               </Text>
-              <Text style={styles.statLabel}>Publicaciones</Text>
+              <Text style={styles.statLabel}>Publicadas</Text>
             </View>
           </View>
 
-          <SocialLinksRow links={profile.socialLinks} />
+          {hasSocialLinks ? (
+            <SocialLinksRow links={profile.socialLinks} />
+          ) : (
+            <Pressable
+              onPress={() => router.push('/edit-profile')}
+              accessibilityRole="button"
+              style={styles.addLinksHint}
+            >
+              <Text style={styles.addLinksText}>
+                Agregá tu Instagram o WhatsApp para que puedan contactarte
+              </Text>
+            </Pressable>
+          )}
 
-          <View style={styles.actionsRow}>
-            <Button label="Editar perfil" variant="outline" small onPress={() => router.push('/edit-profile')} />
+          <Button
+            label="Publicar prenda"
+            icon="add"
+            onPress={() => router.push('/listing/new')}
+            style={styles.primaryAction}
+          />
+          <View style={styles.secondaryActions}>
+            <Button
+              label="Editar perfil"
+              variant="outline"
+              small
+              onPress={() => router.push('/edit-profile')}
+              style={styles.secondaryButton}
+            />
             <Button
               label="Mis publicaciones"
               variant="outline"
               small
               onPress={() => router.push('/my-listings')}
+              style={styles.secondaryButton}
             />
           </View>
 
           {!profile.isPro ? (
-            <Button
-              label={
-                proRequest?.status === 'pending'
-                  ? 'Solicitud PRO en revisión'
-                  : proRequest?.status === 'rejected'
-                    ? 'Volver a solicitar cuenta PRO'
-                    : 'Solicitar cuenta PRO'
-              }
-              variant="secondary"
-              disabled={proRequest?.status === 'pending'}
-              style={styles.proButton}
+            <Pressable
+              style={({ pressed }) => [styles.proCard, pressed && styles.proCardPressed]}
               onPress={() => router.push('/pro-request')}
-            />
+              disabled={proRequest?.status === 'pending'}
+              accessibilityRole="button"
+            >
+              <Text style={styles.proTitle}>
+                {proRequest?.status === 'pending'
+                  ? 'Tu solicitud PRO está en revisión'
+                  : 'Pasate a cuenta PRO'}
+              </Text>
+              <Text style={styles.proBody}>
+                {proRequest?.status === 'pending'
+                  ? 'Te avisamos por notificación cuando la revisemos.'
+                  : `Hoy te quedan ${remainingSlots} de ${cap} publicaciones activas. Con PRO llegás a 50.`}
+              </Text>
+            </Pressable>
           ) : null}
-
-          <Button
-            label="Publicar prenda"
-            onPress={() => router.push('/listing/new')}
-            style={styles.newListingButton}
-          />
         </View>
 
-        <Text style={styles.sectionTitle}>Mis publicaciones activas</Text>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Mis publicaciones activas</Text>
+          {activeListings.length > PREVIEW_LISTINGS ? (
+            <Pressable
+              onPress={() => router.push('/my-listings')}
+              hitSlop={HitSlop.small}
+              accessibilityRole="button"
+            >
+              <Text style={styles.sectionLink}>Ver todas</Text>
+            </Pressable>
+          ) : null}
+        </View>
+
         <FlatList
-          data={activeListings}
+          data={preview}
           numColumns={2}
           scrollEnabled={false}
           keyExtractor={(item) => item.id}
@@ -121,7 +177,9 @@ export default function ProfileScreen() {
             <EmptyState
               icon="shirt-outline"
               title="Todavía no publicaste nada"
-              subtitle="Tocá 'Publicar prenda' para empezar a vender."
+              subtitle="Subí tu primera prenda: con el precio, el talle y el estado alcanza para que aparezca en Descubrir."
+              actionLabel="Publicar prenda"
+              onAction={() => router.push('/listing/new')}
             />
           }
         />
@@ -137,95 +195,135 @@ function formatCount(value: number | undefined): string {
 
 const styles = StyleSheet.create({
   scroll: {
-    paddingBottom: 40,
+    paddingBottom: Spacing.xxxl,
   },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  card: {
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: Colors.text,
-  },
-  profileCard: {
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    gap: 8,
+    marginHorizontal: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.xl,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    gap: Spacing.sm,
+    ...Shadows.card,
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 8,
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
   },
   displayName: {
+    ...Typography.heading,
     fontSize: 20,
-    fontWeight: '800',
-    color: Colors.text,
   },
   username: {
-    fontSize: 14,
-    color: Colors.textMuted,
+    ...Typography.caption,
   },
   city: {
-    fontSize: 13,
-    color: Colors.textMuted,
+    ...Typography.caption,
   },
   bio: {
-    fontSize: 14,
-    color: Colors.text,
+    ...Typography.body,
     textAlign: 'center',
-    marginTop: 4,
+    marginTop: Spacing.xs,
   },
   statsRow: {
     flexDirection: 'row',
-    gap: 28,
-    marginTop: 10,
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    justifyContent: 'space-around',
+    marginTop: Spacing.md,
+    paddingVertical: Spacing.md,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: Colors.border,
   },
   stat: {
     alignItems: 'center',
+    minWidth: 74,
+    gap: 2,
+  },
+  statDivider: {
+    width: 1,
+    height: 26,
+    backgroundColor: Colors.border,
   },
   statNumber: {
-    fontSize: 16,
+    ...Typography.bodyStrong,
+    fontSize: 17,
     fontWeight: '800',
-    color: Colors.text,
+  },
+  statNumberMuted: {
+    color: Colors.textMuted,
+    fontWeight: '600',
   },
   statLabel: {
-    fontSize: 11,
-    color: Colors.textMuted,
+    ...Typography.micro,
   },
-  actionsRow: {
+  addLinksHint: {
+    marginTop: Spacing.xs,
+  },
+  addLinksText: {
+    ...Typography.caption,
+    color: Colors.primaryInk,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  primaryAction: {
+    alignSelf: 'stretch',
+    marginTop: Spacing.md,
+  },
+  secondaryActions: {
     flexDirection: 'row',
-    gap: 10,
-    marginTop: 14,
-  },
-  proButton: {
-    marginTop: 12,
     alignSelf: 'stretch',
+    gap: Spacing.md,
   },
-  newListingButton: {
-    marginTop: 10,
+  secondaryButton: {
+    flex: 1,
+  },
+  proCard: {
     alignSelf: 'stretch',
+    marginTop: Spacing.md,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.primarySoft,
+    gap: Spacing.xs,
+  },
+  proCardPressed: {
+    opacity: 0.85,
+  },
+  proTitle: {
+    ...Typography.sectionTitle,
+  },
+  proBody: {
+    ...Typography.caption,
+    color: Colors.text,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.lg,
+    marginTop: Spacing.xxl,
+    marginBottom: Spacing.md,
   },
   sectionTitle: {
+    ...Typography.sectionTitle,
     fontSize: 16,
+  },
+  sectionLink: {
+    ...Typography.micro,
+    color: Colors.primaryInk,
     fontWeight: '700',
-    color: Colors.text,
-    paddingHorizontal: 20,
-    marginTop: 24,
-    marginBottom: 8,
   },
   grid: {
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.lg,
   },
   column: {
-    gap: 12,
-    marginBottom: 12,
+    gap: Spacing.lg,
   },
 });

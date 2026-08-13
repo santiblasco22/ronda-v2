@@ -4,6 +4,8 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text } from 're
 import { Button } from '@/components/Button';
 import { TextField } from '@/components/TextField';
 import { Colors } from '@/constants/colors';
+import { MAX_USERNAME_LENGTH } from '@/constants/limits';
+import { Radius, Spacing, Typography } from '@/constants/theme';
 import { signOut } from '@/features/auth/authApi';
 import { createUserProfile, isUsernameTaken } from '@/features/users/usersApi';
 import { useAuthStore } from '@/store/authStore';
@@ -72,7 +74,9 @@ export default function OnboardingScreen() {
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Contanos sobre vos</Text>
+        <Text style={styles.title} accessibilityRole="header">
+          Contanos sobre vos
+        </Text>
         <Text style={styles.subtitle}>Así te van a encontrar otros usuarios en Ronda.</Text>
 
         <TextField
@@ -85,10 +89,19 @@ export default function OnboardingScreen() {
           label="Nombre de usuario"
           placeholder="ej: sofia.vintage"
           autoCapitalize="none"
+          autoCorrect={false}
           value={username}
           onChangeText={setUsername}
+          maxLength={MAX_USERNAME_LENGTH}
+          hint="Minúsculas, números, puntos y guiones bajos. No se puede cambiar después."
         />
-        <TextField label="Ciudad" placeholder="Ej: Buenos Aires" value={city} onChangeText={setCity} />
+        <TextField
+          label="Ciudad"
+          placeholder="Ej: Buenos Aires"
+          value={city}
+          onChangeText={setCity}
+          hint="Se muestra en tus publicaciones para que sepan de dónde sos."
+        />
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <Button label="Continuar" onPress={handleContinue} loading={loading} style={styles.button} />
@@ -108,27 +121,28 @@ const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: Colors.background },
   container: {
     flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 40,
-    paddingBottom: 48,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.xxxl,
+    paddingBottom: Spacing.xxxl,
   },
   title: {
+    ...Typography.display,
     fontSize: 26,
-    fontWeight: '800',
-    color: Colors.text,
-    marginBottom: 4,
+    marginBottom: Spacing.xs,
   },
   subtitle: {
-    fontSize: 14,
-    color: Colors.textMuted,
-    marginBottom: 24,
+    ...Typography.caption,
+    marginBottom: Spacing.xxl,
   },
   button: {
-    marginTop: 10,
+    marginTop: Spacing.md,
   },
   error: {
-    color: Colors.danger,
-    fontSize: 13,
-    marginBottom: 10,
+    ...Typography.caption,
+    color: Colors.dangerInk,
+    backgroundColor: Colors.dangerSoft,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    marginBottom: Spacing.md,
   },
 });

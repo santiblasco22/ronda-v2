@@ -1,16 +1,21 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/Button';
 import { Chip } from '@/components/Chip';
 import { PhotoPicker, type PickedPhoto } from '@/components/PhotoPicker';
 import { TextField } from '@/components/TextField';
 import { Colors } from '@/constants/colors';
-import { getListingCapFor, MAX_LISTING_DESCRIPTION_LENGTH, MAX_LISTING_TITLE_LENGTH } from '@/constants/limits';
+import {
+  getListingCapFor,
+  MAX_LISTING_DESCRIPTION_LENGTH,
+  MAX_LISTING_TITLE_LENGTH,
+} from '@/constants/limits';
+import { Radius, Spacing, Typography } from '@/constants/theme';
 import { useCreateListing } from '@/features/listings/useListings';
+import { PhotoUploadError } from '@/lib/photoUploads';
 import { useAuthStore } from '@/store/authStore';
-import { isPermissionDenied } from '@/utils/errors';
 import {
   LISTING_CATEGORIES,
   LISTING_CONDITIONS,
@@ -19,6 +24,7 @@ import {
   type ListingCondition,
   type ListingSize,
 } from '@/types/models';
+import { isPermissionDenied } from '@/utils/errors';
 import { validatePrice } from '@/utils/validators';
 
 export default function NewListingScreen() {
@@ -51,7 +57,6 @@ export default function NewListingScreen() {
     if (!category) return setError('Elegí una categoría.');
     if (!size) return setError('Elegí un talle.');
     if (!condition) return setError('Elegí el estado de la prenda.');
-    if (photos.length === 0) return setError('Agregá al menos una foto.');
 
     try {
       const id = await createListing.mutateAsync({
@@ -67,6 +72,10 @@ export default function NewListingScreen() {
       });
       router.replace({ pathname: '/listing/[id]', params: { id } });
     } catch (err) {
+      if (err instanceof PhotoUploadError) {
+        setError(err.message);
+        return;
+      }
       // El tope del plan también se aplica en las reglas de Firestore, así
       // que puede rebotar acá aunque la UI creyera que había cupo.
       setError(
@@ -81,13 +90,17 @@ export default function NewListingScreen() {
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>Publicar una prenda</Text>
+        <Text style={styles.subtitle}>
+          Te quedan {Math.max(cap - profile.activeListingCount, 0)} de {cap} publicaciones activas.
+        </Text>
 
         {reachedCap ? (
           <View style={styles.capWarning}>
+            <Text style={styles.capWarningTitle}>Llegaste al límite de tu plan</Text>
             <Text style={styles.capWarningText}>
-              Llegaste al límite de {cap} publicaciones activas de tu plan
-              {profile.isPro ? ' PRO' : ''}. Archivá alguna publicación o solicitá una cuenta PRO para
-              publicar más.
+              Tenés {cap} publicaciones activas
+              {profile.isPro ? ' (plan PRO)' : ''}. Archivá o marcá como vendida alguna para liberar
+              lugar{profile.isPro ? '.' : ', o pedí una cuenta PRO.'}
             </Text>
             <Button
               label="Ver mis publicaciones"
@@ -101,30 +114,34 @@ export default function NewListingScreen() {
         <Text style={styles.label}>Fotos</Text>
         <PhotoPicker photos={photos} onChange={setPhotos} />
 
-        <TextField
-          label="Título"
-          placeholder="Ej: Campera de jean talle M"
-          value={title}
-          onChangeText={setTitle}
-          maxLength={MAX_LISTING_TITLE_LENGTH}
-        />
-        <TextField
-          label="Descripción"
-          placeholder="Contá el estado, la tela, cómo calza…"
-          value={description}
-          onChangeText={setDescription}
-          maxLength={MAX_LISTING_DESCRIPTION_LENGTH}
-          multiline
-          numberOfLines={4}
-          style={styles.textarea}
-        />
-        <TextField
-          label="Precio"
-          placeholder="Ej: 8000"
-          keyboardType="numeric"
-          value={price}
-          onChangeText={setPrice}
-        />
+        <View style={styles.fieldsBlock}>
+          <TextField
+            label="Título"
+            placeholder="Ej: Campera de jean talle M"
+            value={title}
+            onChangeText={setTitle}
+            maxLength={MAX_LISTING_TITLE_LENGTH}
+            showCounter
+          />
+          <TextField
+            label="Descripción"
+            placeholder="Contá el estado, la tela, cómo calza…"
+            value={description}
+            onChangeText={setDescription}
+            maxLength={MAX_LISTING_DESCRIPTION_LENGTH}
+            multiline
+            numberOfLines={4}
+            style={styles.textarea}
+          />
+          <TextField
+            label="Precio"
+            placeholder="Ej: 8000"
+            keyboardType="numeric"
+            value={price}
+            onChangeText={setPrice}
+            hint="Solo números, en pesos."
+          />
+        </View>
 
         <Text style={styles.label}>Categoría</Text>
         <View style={styles.chipsRow}>
@@ -140,27 +157,23 @@ export default function NewListingScreen() {
           ))}
         </View>
 
-        <Text style={styles.label}>Estado</Text>
+        <Text style={styles.label}>Estado de la prenda</Text>
         <View style={styles.chipsRow}>
           {LISTING_CONDITIONS.map((item) => (
             <Chip key={item} label={item} selected={condition === item} onPress={() => setCondition(item)} />
           ))}
         </View>
 
-        <TextField label="Color" placeholder="Ej: Azul" value={color} onChangeText={setColor} />
-        <TextField label="Ciudad" placeholder="Ej: Córdoba" value={city} onChangeText={setCity} />
+        <View style={styles.fieldsBlock}>
+          <TextField label="Color" placeholder="Ej: Azul" value={color} onChangeText={setColor} />
+          <TextField label="Ciudad" placeholder="Ej: Córdoba" value={city} onChangeText={setCity} />
+        </View>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <Button
           label="Publicar"
-          onPress={() => {
-            if (reachedCap) {
-              Alert.alert('Límite alcanzado', 'Llegaste al límite de publicaciones activas.');
-              return;
-            }
-            handleSubmit();
-          }}
+          onPress={handleSubmit}
           loading={createListing.isPending}
           disabled={reachedCap}
           style={styles.submitButton}
@@ -173,50 +186,59 @@ export default function NewListingScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: Colors.background },
   container: {
-    padding: 20,
-    paddingBottom: 60,
+    padding: Spacing.xl,
+    paddingBottom: Spacing.xxxl + Spacing.xl,
   },
   title: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: Colors.text,
-    marginBottom: 16,
+    ...Typography.title,
+  },
+  subtitle: {
+    ...Typography.caption,
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.xl,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 8,
-    marginTop: 4,
+    ...Typography.label,
+    marginBottom: Spacing.md,
+    marginTop: Spacing.lg,
+  },
+  fieldsBlock: {
+    marginTop: Spacing.xl,
   },
   chipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 14,
+    gap: Spacing.sm,
   },
   textarea: {
-    height: 100,
+    height: 108,
     textAlignVertical: 'top',
+    paddingTop: Spacing.md,
   },
   error: {
-    color: Colors.danger,
-    fontSize: 13,
-    marginBottom: 10,
+    ...Typography.caption,
+    color: Colors.dangerInk,
+    backgroundColor: Colors.dangerSoft,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    marginTop: Spacing.lg,
   },
   submitButton: {
-    marginTop: 12,
+    marginTop: Spacing.xl,
   },
   capWarning: {
     backgroundColor: Colors.primarySoft,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-    gap: 10,
+    borderRadius: Radius.lg,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
+    gap: Spacing.sm,
+    alignItems: 'flex-start',
+  },
+  capWarningTitle: {
+    ...Typography.sectionTitle,
   },
   capWarningText: {
-    fontSize: 13,
-    color: Colors.primaryDark,
-    fontWeight: '600',
+    ...Typography.caption,
+    color: Colors.text,
   },
 });

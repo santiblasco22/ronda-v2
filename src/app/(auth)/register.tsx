@@ -4,6 +4,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text } from 're
 import { Button } from '@/components/Button';
 import { TextField } from '@/components/TextField';
 import { Colors } from '@/constants/colors';
+import { Radius, Spacing, Typography } from '@/constants/theme';
 import { mapAuthError, signUpWithEmail } from '@/features/auth/authApi';
 import { validateEmail, validatePassword } from '@/utils/validators';
 
@@ -43,14 +44,23 @@ export default function RegisterScreen() {
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Creá tu cuenta</Text>
+        <Text style={styles.title} accessibilityRole="header">
+          Creá tu cuenta
+        </Text>
         <Text style={styles.subtitle}>Es gratis y te lleva un minuto.</Text>
 
-        <TextField label="Nombre" placeholder="Tu nombre" value={displayName} onChangeText={setDisplayName} />
+        <TextField
+          label="Nombre"
+          placeholder="Tu nombre"
+          value={displayName}
+          onChangeText={setDisplayName}
+          autoComplete="name"
+        />
         <TextField
           label="Email"
           placeholder="tu@email.com"
           autoCapitalize="none"
+          autoComplete="email"
           keyboardType="email-address"
           value={email}
           onChangeText={setEmail}
@@ -59,8 +69,10 @@ export default function RegisterScreen() {
           label="Contraseña"
           placeholder="Al menos 6 caracteres"
           secureTextEntry
+          autoComplete="new-password"
           value={password}
           onChangeText={setPassword}
+          hint="Mínimo 6 caracteres."
         />
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -74,27 +86,28 @@ const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: Colors.background },
   container: {
     flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 48,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.xl,
+    paddingBottom: Spacing.xxxl,
   },
   title: {
+    ...Typography.display,
     fontSize: 26,
-    fontWeight: '800',
-    color: Colors.text,
-    marginBottom: 4,
+    marginBottom: Spacing.xs,
   },
   subtitle: {
-    fontSize: 14,
-    color: Colors.textMuted,
-    marginBottom: 24,
+    ...Typography.caption,
+    marginBottom: Spacing.xxl,
   },
   button: {
-    marginTop: 10,
+    marginTop: Spacing.md,
   },
   error: {
-    color: Colors.danger,
-    fontSize: 13,
-    marginBottom: 10,
+    ...Typography.caption,
+    color: Colors.dangerInk,
+    backgroundColor: Colors.dangerSoft,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    marginBottom: Spacing.md,
   },
 });

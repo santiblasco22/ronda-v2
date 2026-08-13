@@ -9,7 +9,9 @@ import { PhotoPicker, type PickedPhoto } from '@/components/PhotoPicker';
 import { TextField } from '@/components/TextField';
 import { Colors } from '@/constants/colors';
 import { MAX_LISTING_DESCRIPTION_LENGTH, MAX_LISTING_TITLE_LENGTH } from '@/constants/limits';
+import { Radius, Spacing, Typography } from '@/constants/theme';
 import { useDeleteListing, useListing, useSetListingStatus, useUpdateListing } from '@/features/listings/useListings';
+import { PhotoUploadError } from '@/lib/photoUploads';
 import {
   LISTING_CATEGORIES,
   LISTING_CONDITIONS,
@@ -65,7 +67,6 @@ function EditListingForm({ listing }: { listing: Listing }) {
     const priceError = validatePrice(price);
     if (priceError) return setError(priceError);
     if (!category || !size || !condition) return setError('Completá categoría, talle y estado.');
-    if (photos.length === 0) return setError('Necesitás al menos una foto.');
 
     try {
       await updateListing.mutateAsync({
@@ -81,8 +82,10 @@ function EditListingForm({ listing }: { listing: Listing }) {
         addLocalPhotoUris: photos.filter((p) => p.isLocal).map((p) => p.uri),
       });
       router.back();
-    } catch {
-      setError('No pudimos guardar los cambios.');
+    } catch (err) {
+      setError(
+        err instanceof PhotoUploadError ? err.message : 'No pudimos guardar los cambios.'
+      );
     }
   }
 
@@ -190,38 +193,38 @@ function EditListingForm({ listing }: { listing: Listing }) {
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: Colors.background },
   container: {
-    padding: 20,
-    paddingBottom: 60,
+    padding: Spacing.xl,
+    paddingBottom: Spacing.xxxl + Spacing.xl,
   },
   title: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: Colors.text,
-    marginBottom: 16,
+    ...Typography.title,
+    marginBottom: Spacing.lg,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 8,
-    marginTop: 4,
+    ...Typography.label,
+    marginBottom: Spacing.md,
+    marginTop: Spacing.lg,
   },
   chipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 14,
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
   },
   textarea: {
-    height: 100,
+    height: 108,
     textAlignVertical: 'top',
+    paddingTop: Spacing.md,
   },
   error: {
-    color: Colors.danger,
-    fontSize: 13,
-    marginBottom: 10,
+    ...Typography.caption,
+    color: Colors.dangerInk,
+    backgroundColor: Colors.dangerSoft,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    marginTop: Spacing.lg,
   },
   saveButton: {
-    marginTop: 10,
+    marginTop: Spacing.lg,
   },
 });
