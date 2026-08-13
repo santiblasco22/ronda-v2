@@ -142,6 +142,16 @@ npx expo start
 Escaneá el QR con la app Expo Go (Android) o la cámara (iOS), o presioná `i`
 / `a` para abrir un simulador si tenés el entorno nativo configurado.
 
+### Probar en Expo Go
+
+Pasos concretos para levantar el MVP en un celular, sin build nativo:
+
+1. Instalá dependencias y copiá el archivo de ejemplo de entorno. Completá las variables públicas de Firebase (Configuración del proyecto, Tus apps).
+2. Dejá las subidas de fotos apagadas (el default en el archivo de ejemplo). Firebase Storage pide plan Blaze; con las fotos apagadas se publica igual y se ve un marcador de posición. Solo activálas si tu proyecto ya tiene Storage habilitado.
+3. Si vas a probar Google, completá los client IDs web en el archivo de entorno (tipo Web en Google Cloud Console). Los de iOS/Android hacen falta para un build nativo, no para Expo Go. Sin esas variables el botón de Google muestra un aviso en vez de dejar la pantalla en blanco.
+4. Corré `npx expo start` y escaneá el QR: en Android, desde la app Expo Go; en iOS, con la Cámara (abre Expo Go). El login con email y contraseña funciona en Expo Go. El esquema de deep link está en `app.json`.
+5. Recorré el plan de pruebas manual de más abajo: registro, onboarding, Descubrir (swipe), publicar sin fotos, seguir a otra cuenta.
+
 ### Scripts disponibles
 
 | Script              | Descripción                                  |
@@ -189,7 +199,7 @@ listings/{listingId}
   sellerId,
   sellerUsername, sellerDisplayName, sellerAvatarUrl, sellerIsPro,  ← denormalizado del vendedor
   title, description, price, category, size, condition, color, city,
-  photos: string[] (1 a 5),
+  photos: string[] (0 a 5),
   status: 'active' | 'sold' | 'archived',
   likeCount,
   createdAt, updatedAt
@@ -460,24 +470,24 @@ real conectado (dos cuentas de prueba ayudan a probar follow/rating):
 
 ### Estados vacíos y presentación
 
-28. Entrar a cada pestaña sin datos (cuenta nueva) → Descubrir, Siguiendo,
+26. Entrar a cada pestaña sin datos (cuenta nueva) → Descubrir, Siguiendo,
     Buscar, Avisos y Perfil tienen que mostrar un estado vacío en español que
     explique qué pasa y ofrezca la acción siguiente, nunca una lista en blanco.
     "Siguiendo" distingue "todavía no seguís a nadie" de "los que seguís no
     tienen publicaciones activas".
-29. Buscar algo inexistente con filtros puestos → estado vacío con la acción
+27. Buscar algo inexistente con filtros puestos → estado vacío con la acción
     "Limpiar filtros" (distinto del estado "todavía no hay prendas
     publicadas").
-30. Con el lector de pantalla activado, recorrer el mazo de swipe, las
+28. Con el lector de pantalla activado, recorrer el mazo de swipe, las
     tarjetas y los contadores del perfil → cada control tiene que anunciarse
     con su etiqueta y su estado.
 
 ### Rutas protegidas
 
-26. Con la sesión cerrada, abrir un deep link a una pantalla interna
+29. Con la sesión cerrada, abrir un deep link a una pantalla interna
     (`ronda://listing/new`, `ronda://edit-profile`, `ronda://user/<uid>`) →
     debe redirigir al login, no mostrar una pantalla vacía.
-27. Con sesión iniciada pero sin perfil creado (registro a medias), cualquier
+30. Con sesión iniciada pero sin perfil creado (registro a medias), cualquier
     ruta interna debe llevar al onboarding.
 
 ## Verificación automática

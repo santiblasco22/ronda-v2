@@ -23,7 +23,11 @@ export const isGoogleAuthConfigured = Boolean(
  * Expo Go, sin necesidad de módulos nativos). Solo se puede usar cuando
  * `isGoogleAuthConfigured` es true.
  */
-export function useGoogleAuth(onSuccess: () => void, onError: (message: string) => void) {
+export function useGoogleAuth(
+  onSuccess: () => void,
+  onError: (message: string) => void,
+  onCancel?: () => void
+) {
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
     clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
     iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
@@ -46,6 +50,9 @@ export function useGoogleAuth(onSuccess: () => void, onError: (message: string) 
         });
     } else if (response?.type === 'error') {
       onError('No se pudo iniciar sesión con Google.');
+    } else if (response?.type === 'cancel' || response?.type === 'dismiss') {
+      // El usuario cerró la hoja de Google a propósito: no es un error.
+      onCancel?.();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [response]);

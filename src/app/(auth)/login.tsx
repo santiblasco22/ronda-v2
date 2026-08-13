@@ -14,7 +14,8 @@ import { validateEmail } from '@/utils/validators';
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleLogin() {
@@ -28,14 +29,14 @@ export default function LoginScreen() {
       setError('Ingresá tu contraseña.');
       return;
     }
-    setLoading(true);
+    setEmailLoading(true);
     try {
       await signInWithEmail(email, password);
       // El listener global de auth actualiza el store y redirige automáticamente.
     } catch (err) {
       setError(mapAuthError(err));
     } finally {
-      setLoading(false);
+      setEmailLoading(false);
     }
   }
 
@@ -72,7 +73,7 @@ export default function LoginScreen() {
           />
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
-          <Button label="Iniciar sesión" onPress={handleLogin} loading={loading} />
+          <Button label="Iniciar sesión" onPress={handleLogin} loading={emailLoading} disabled={googleLoading} />
 
           <View style={styles.dividerRow}>
             <View style={styles.divider} />
@@ -81,14 +82,16 @@ export default function LoginScreen() {
           </View>
 
           <GoogleSignInButton
-            loading={loading}
+            loading={googleLoading}
+            disabled={emailLoading}
             onStart={() => {
               setError(null);
-              setLoading(true);
+              setGoogleLoading(true);
             }}
-            onSuccess={() => setLoading(false)}
+            onSuccess={() => setGoogleLoading(false)}
+            onCancel={() => setGoogleLoading(false)}
             onError={(message) => {
-              setLoading(false);
+              setGoogleLoading(false);
               setError(message);
             }}
           />

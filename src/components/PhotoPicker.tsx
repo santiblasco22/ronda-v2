@@ -5,7 +5,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 
 import { Colors } from '@/constants/colors';
 import { MAX_LISTING_PHOTOS } from '@/constants/limits';
-import { HitSlop, Radius, Spacing, Typography } from '@/constants/theme';
+import { Radius, Spacing, Typography, hitSlopForSize } from '@/constants/theme';
 import {
   PHOTO_UPLOADS_DISABLED_MESSAGE,
   PHOTO_UPLOADS_DISABLED_TITLE,
@@ -17,6 +17,8 @@ export interface PickedPhoto {
   uri: string;
   isLocal: boolean;
 }
+
+const REMOVE_BUTTON_SIZE = 22;
 
 export function PhotoPicker({
   photos,
@@ -79,7 +81,7 @@ export function PhotoPicker({
               <Pressable
                 style={styles.removeButton}
                 onPress={() => removeAt(index)}
-                hitSlop={HitSlop.small}
+                hitSlop={hitSlopForSize(REMOVE_BUTTON_SIZE)}
                 accessibilityRole="button"
                 accessibilityLabel={`Quitar la foto ${index + 1}`}
               >
@@ -133,8 +135,8 @@ const styles = StyleSheet.create({
     right: -6,
     backgroundColor: Colors.danger,
     borderRadius: Radius.pill,
-    width: 22,
-    height: 22,
+    width: REMOVE_BUTTON_SIZE,
+    height: REMOVE_BUTTON_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
   },
