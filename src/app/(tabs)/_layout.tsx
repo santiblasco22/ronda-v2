@@ -33,7 +33,7 @@ export default function TabsLayout() {
           backgroundColor: Colors.surface,
           borderTopColor: Colors.border,
           paddingTop: 7,
-          paddingBottom: insets.bottom,
+          paddingBottom: Math.max(insets.bottom, 8),
         },
         tabBarLabelStyle: { fontSize: 11, fontWeight: Typography.micro.fontWeight },
         tabBarBadgeStyle: {
