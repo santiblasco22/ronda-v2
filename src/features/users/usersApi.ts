@@ -1,19 +1,20 @@
 import {
+  average,
   collection,
-  deleteDoc,
+  count,
   doc,
+  getAggregateFromServer,
   getCountFromServer,
   getDoc,
   getDocs,
-  limit,
   query,
-  setDoc,
   updateDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 
 import { db } from '@/lib/firebase';
-import type { FollowEdge, SocialLinks, UserProfile } from '@/types/models';
+import type { FollowEdge, SocialLinks, UserProfile, UserStats } from '@/types/models';
 import { normalizeUsername } from '@/utils/validators';
 
 function userDocRef(uid: string) {
@@ -33,14 +34,19 @@ function fromSnapshot(uid: string, data: Record<string, unknown>): UserProfile {
     socialLinks: (data.socialLinks as SocialLinks) ?? {},
     isPro: Boolean(data.isPro),
     proSince: (data.proSince as number | null) ?? null,
-    listingCount: Number(data.listingCount ?? 0),
     activeListingCount: Number(data.activeListingCount ?? 0),
-    followerCount: Number(data.followerCount ?? 0),
-    followingCount: Number(data.followingCount ?? 0),
-    ratingAvg: Number(data.ratingAvg ?? 0),
-    ratingCount: Number(data.ratingCount ?? 0),
     createdAt: Number(data.createdAt ?? Date.now()),
     updatedAt: Number(data.updatedAt ?? Date.now()),
+  };
+}
+
+function followEdgeFor(user: UserProfile, createdAt: number): FollowEdge {
+  return {
+    uid: user.uid,
+    username: user.username,
+    displayName: user.displayName,
+    avatarUrl: user.avatarUrl,
+    createdAt,
   };
 }
 
@@ -50,11 +56,14 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   return fromSnapshot(uid, snap.data());
 }
 
-export async function isUsernameTaken(username: string, excludeUid?: string): Promise<boolean> {
-  const usersRef = collection(db, 'users');
-  const q = query(usersRef, where('usernameLower', '==', normalizeUsername(username)), limit(2));
-  const snap = await getDocs(q);
-  return snap.docs.some((d) => d.id !== excludeUid);
+/**
+ * La unicidad real la garantiza la colección `usernames`, donde el id del
+ * documento es el nombre: crearlo dos veces falla del lado del servidor. Esta
+ * consulta es solo para avisar antes de enviar el formulario.
+ */
+export async function isUsernameTaken(username: string): Promise<boolean> {
+  const snap = await getDoc(doc(db, 'usernames', normalizeUsername(username)));
+  return snap.exists();
 }
 
 export interface CreateProfileInput {
@@ -65,12 +74,17 @@ export interface CreateProfileInput {
   city: string;
 }
 
+/**
+ * Crea el perfil y reserva el nombre de usuario en un único batch. Si otra
+ * persona se quedó con el nombre en el medio, `usernames/{nombre}` ya existe
+ * y todo el batch falla: la unicidad no depende de la validación previa.
+ */
 export async function createUserProfile(input: CreateProfileInput): Promise<UserProfile> {
   const now = Date.now();
   const usernameLower = normalizeUsername(input.username);
   const data = {
     email: input.email,
-    username: input.username.trim(),
+    username: usernameLower,
     usernameLower,
     displayName: input.displayName.trim(),
     bio: '',
@@ -79,8 +93,12 @@ export async function createUserProfile(input: CreateProfileInput): Promise<User
     socialLinks: {},
     isPro: false,
     proSince: null,
-    listingCount: 0,
     activeListingCount: 0,
+    lastListingOpId: null,
+    // Contadores reservados para Cloud Functions: se inicializan en cero y
+    // ninguna regla permite que el cliente los vuelva a tocar. La app muestra
+    // los números reales con getUserStats().
+    listingCount: 0,
     followerCount: 0,
     followingCount: 0,
     ratingAvg: 0,
@@ -88,7 +106,12 @@ export async function createUserProfile(input: CreateProfileInput): Promise<User
     createdAt: now,
     updatedAt: now,
   };
-  await setDoc(userDocRef(input.uid), data);
+
+  const batch = writeBatch(db);
+  batch.set(userDocRef(input.uid), data);
+  batch.set(doc(db, 'usernames', usernameLower), { uid: input.uid, createdAt: now });
+  await batch.commit();
+
   return fromSnapshot(input.uid, data);
 }
 
@@ -108,43 +131,33 @@ export async function updateUserProfile(uid: string, input: UpdateProfileInput):
 }
 
 /**
- * Recalcula los contadores del propio usuario (followers/following/listings/ratings)
- * a partir de las subcolecciones reales y los persiste en su documento.
- * Solo el propio usuario puede llamar esto (regla: self-write only).
+ * Calcula los números sociales de un perfil desde las colecciones de origen
+ * (followers/following/listings/ratings) en vez de leer contadores
+ * denormalizados. Son cuatro agregaciones del lado del servidor, así que no
+ * se descargan documentos y nadie puede inflar sus propias métricas.
  */
-export async function refreshOwnAggregates(uid: string): Promise<void> {
-  const followersQuery = collection(db, 'users', uid, 'followers');
-  const followingQuery = collection(db, 'users', uid, 'following');
-  const listingsAllQuery = query(collection(db, 'listings'), where('sellerId', '==', uid));
-  const listingsActiveQuery = query(
-    collection(db, 'listings'),
-    where('sellerId', '==', uid),
-    where('status', '==', 'active')
-  );
-  const ratingsQuery = query(collection(db, 'ratings'), where('ratedUserId', '==', uid));
+export async function getUserStats(uid: string): Promise<UserStats> {
+  const [followers, following, activeListings, ratings] = await Promise.all([
+    getCountFromServer(collection(db, 'users', uid, 'followers')),
+    getCountFromServer(collection(db, 'users', uid, 'following')),
+    getCountFromServer(
+      query(collection(db, 'listings'), where('sellerId', '==', uid), where('status', '==', 'active'))
+    ),
+    getAggregateFromServer(query(collection(db, 'ratings'), where('ratedUserId', '==', uid)), {
+      ratingCount: count(),
+      ratingAvg: average('stars'),
+    }),
+  ]);
 
-  const [followersCount, followingCount, listingsCount, activeListingsCount, ratingsSnap] =
-    await Promise.all([
-      getCountFromServer(followersQuery),
-      getCountFromServer(followingQuery),
-      getCountFromServer(listingsAllQuery),
-      getCountFromServer(listingsActiveQuery),
-      getDocs(ratingsQuery),
-    ]);
+  const ratingAvg = ratings.data().ratingAvg ?? 0;
 
-  const stars = ratingsSnap.docs.map((d) => Number(d.data().stars ?? 0));
-  const ratingCount = stars.length;
-  const ratingAvg = ratingCount > 0 ? stars.reduce((a, b) => a + b, 0) / ratingCount : 0;
-
-  await updateDoc(userDocRef(uid), {
-    followerCount: followersCount.data().count,
-    followingCount: followingCount.data().count,
-    listingCount: listingsCount.data().count,
-    activeListingCount: activeListingsCount.data().count,
+  return {
+    followers: followers.data().count,
+    following: following.data().count,
+    activeListings: activeListings.data().count,
+    ratingCount: ratings.data().ratingCount,
     ratingAvg: Math.round(ratingAvg * 10) / 10,
-    ratingCount,
-    updatedAt: Date.now(),
-  });
+  };
 }
 
 export async function getFollowers(uid: string): Promise<FollowEdge[]> {
@@ -162,45 +175,38 @@ export async function isFollowing(uid: string, targetUid: string): Promise<boole
   return snap.exists();
 }
 
+/**
+ * Seguir escribe las dos puntas de la relación (y el aviso para la otra
+ * persona) en un único batch: las reglas rechazan cualquiera de los tres
+ * documentos por separado, así que no puede quedar una mitad huérfana.
+ */
 export async function followUser(current: UserProfile, target: UserProfile): Promise<void> {
   const now = Date.now();
-  await Promise.all([
-    setDoc(doc(db, 'users', current.uid, 'following', target.uid), {
-      uid: target.uid,
-      username: target.username,
-      displayName: target.displayName,
-      avatarUrl: target.avatarUrl,
-      createdAt: now,
-    }),
-    setDoc(doc(db, 'users', target.uid, 'followers', current.uid), {
-      uid: current.uid,
-      username: current.username,
-      displayName: current.displayName,
-      avatarUrl: current.avatarUrl,
-      createdAt: now,
-    }),
-    updateDoc(userDocRef(current.uid), { followingCount: current.followingCount + 1 }),
-    setDoc(doc(collection(db, 'users', target.uid, 'notifications')), {
-      type: 'new_follower',
-      title: 'Nuevo seguidor',
-      body: `${current.displayName} (@${current.username}) empezó a seguirte.`,
-      read: false,
-      createdAt: now,
-      data: { uid: current.uid },
-    }),
-  ]);
+  const batch = writeBatch(db);
+
+  batch.set(
+    doc(db, 'users', current.uid, 'following', target.uid),
+    followEdgeFor(target, now)
+  );
+  batch.set(
+    doc(db, 'users', target.uid, 'followers', current.uid),
+    followEdgeFor(current, now)
+  );
+  batch.set(doc(collection(db, 'users', target.uid, 'notifications')), {
+    type: 'new_follower',
+    title: 'Nuevo seguidor',
+    body: `${current.displayName} (@${current.username}) empezó a seguirte.`,
+    read: false,
+    createdAt: now,
+    data: { uid: current.uid },
+  });
+
+  await batch.commit();
 }
 
-export async function unfollowUser(
-  currentUid: string,
-  currentFollowingCount: number,
-  targetUid: string
-): Promise<void> {
-  await Promise.all([
-    deleteDoc(doc(db, 'users', currentUid, 'following', targetUid)),
-    deleteDoc(doc(db, 'users', targetUid, 'followers', currentUid)),
-    updateDoc(userDocRef(currentUid), {
-      followingCount: Math.max(0, currentFollowingCount - 1),
-    }),
-  ]);
+export async function unfollowUser(currentUid: string, targetUid: string): Promise<void> {
+  const batch = writeBatch(db);
+  batch.delete(doc(db, 'users', currentUid, 'following', targetUid));
+  batch.delete(doc(db, 'users', targetUid, 'followers', currentUid));
+  await batch.commit();
 }

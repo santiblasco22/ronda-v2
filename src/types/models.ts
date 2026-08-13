@@ -13,8 +13,14 @@
  *
  * Los campos "denormalizados" (prefijo seller* / rater* / user*) se copian al
  * momento de crear el documento para poder listar y filtrar sin hacer joins.
- * Se mantienen actualizados de forma "best effort" desde el cliente; para una
- * consistencia perfecta en producción conviene moverlos a Cloud Functions.
+ * Las reglas de seguridad los validan contra el documento real de users/{uid},
+ * así que no se pueden falsear desde el cliente.
+ *
+ * Los contadores sociales (followerCount, followingCount, listingCount,
+ * ratingAvg, ratingCount) viven en Firestore pero NINGÚN cliente puede
+ * escribirlos: quedan reservados para una Cloud Function. Por eso no forman
+ * parte de `UserProfile` — la app calcula esos números al vuelo con
+ * `getUserStats()` (ver `features/users/usersApi.ts`).
  */
 
 export type ListingStatus = 'active' | 'sold' | 'archived';
@@ -48,14 +54,23 @@ export interface UserProfile {
   socialLinks: SocialLinks;
   isPro: boolean;
   proSince: number | null;
-  listingCount: number;
+  /**
+   * Único contador escribible por el cliente, porque las reglas lo usan para
+   * aplicar el tope de publicaciones activas del plan. Solo puede moverse ±1
+   * y siempre en el mismo write que la publicación que lo justifica.
+   */
   activeListingCount: number;
-  followerCount: number;
-  followingCount: number;
-  ratingAvg: number;
-  ratingCount: number;
   createdAt: number;
   updatedAt: number;
+}
+
+/** Números sociales calculados al vuelo desde las colecciones de origen. */
+export interface UserStats {
+  followers: number;
+  following: number;
+  activeListings: number;
+  ratingAvg: number;
+  ratingCount: number;
 }
 
 export interface FollowEdge {

@@ -13,11 +13,12 @@ export function useRatingsForUser(uid: string | undefined) {
   });
 }
 
-export function useHasRated(ratedUserId: string | undefined, listingId: string | null) {
+/** Cada persona puede calificar una sola vez a otra (id determinístico). */
+export function useHasRated(ratedUserId: string | undefined) {
   const myUid = useAuthStore((s) => s.firebaseUid);
   return useQuery({
-    queryKey: ['hasRated', myUid, ratedUserId, listingId],
-    queryFn: () => hasRated(myUid as string, ratedUserId as string, listingId),
+    queryKey: queryKeys.hasRated(myUid ?? 'unknown', ratedUserId ?? 'unknown'),
+    queryFn: () => hasRated(myUid as string, ratedUserId as string),
     enabled: Boolean(myUid) && Boolean(ratedUserId),
   });
 }
@@ -33,7 +34,12 @@ export function useCreateRating() {
     },
     onSuccess: (_data, input) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.ratingsForUser(input.ratedUserId) });
-      void queryClient.invalidateQueries({ queryKey: ['hasRated'] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.userStats(input.ratedUserId) });
+      if (rater) {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.hasRated(rater.uid, input.ratedUserId),
+        });
+      }
     },
   });
 }
