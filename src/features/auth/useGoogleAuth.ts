@@ -27,7 +27,7 @@ export function useGoogleAuth(onSuccess: () => void, onError: (message: string) 
 
   useEffect(() => {
     if (response?.type === 'success') {
-      const idToken = response.authentication?.idToken;
+      const idToken = response.params?.id_token ?? response.authentication?.idToken;
       if (!idToken) {
         onError('No se pudo obtener la credencial de Google.');
         return;

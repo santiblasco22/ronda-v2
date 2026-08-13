@@ -1,8 +1,11 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { type FirebaseApp, getApps, initializeApp } from 'firebase/app';
-import { type Auth, getAuth } from 'firebase/auth';
+// @ts-expect-error Firebase web auth types omit RN-only getReactNativePersistence.
+import { type Auth, getAuth, getReactNativePersistence, initializeAuth } from 'firebase/auth';
 import { type Firestore, getFirestore } from 'firebase/firestore';
 import { type FirebaseStorage, getStorage } from 'firebase/storage';
+import { Platform } from 'react-native';
 
 /**
  * Configuración de Firebase leída desde variables de entorno públicas
@@ -45,6 +48,20 @@ if (getApps().length === 0) {
 }
 
 export const firebaseApp = app;
-export const auth: Auth = getAuth(app);
+
+let resolvedAuth: Auth;
+if (Platform.OS !== 'web') {
+  try {
+    resolvedAuth = initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage),
+    });
+  } catch {
+    resolvedAuth = getAuth(app);
+  }
+} else {
+  resolvedAuth = getAuth(app);
+}
+
+export const auth: Auth = resolvedAuth;
 export const db: Firestore = getFirestore(app);
 export const storage: FirebaseStorage = getStorage(app);
