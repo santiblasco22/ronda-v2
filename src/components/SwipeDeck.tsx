@@ -1,13 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
 import { useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Colors } from '@/constants/colors';
+import { MIN_TOUCH_TARGET, Radius, Shadows, Spacing, Typography } from '@/constants/theme';
 import type { Listing } from '@/types/models';
 import { formatPrice } from '@/utils/format';
 
 import { Avatar } from './Avatar';
+import { ListingPhoto } from './ListingPhoto';
 import { ProBadge } from './StatusBadge';
 import { SwipeCard, type SwipeCardRef } from './SwipeCard';
 
@@ -18,11 +19,14 @@ export function SwipeDeck({
   onLike,
   onPass,
   onOpenListing,
+  isCommitting,
 }: {
   listings: Listing[];
   onLike: (listing: Listing) => void;
   onPass: (listing: Listing) => void;
   onOpenListing: (listing: Listing) => void;
+  /** Hay un swipe viajando al servidor: los botones se apagan hasta que vuelva. */
+  isCommitting?: boolean;
 }) {
   const [index, setIndex] = useState(0);
   const topCardRef = useRef<SwipeCardRef>(null);
@@ -33,6 +37,8 @@ export function SwipeDeck({
   const committed = useRef(new Set<string>());
   const current = listings[index];
   const visible = listings.slice(index, index + VISIBLE_STACK);
+  const remaining = Math.max(listings.length - index, 0);
+  const actionsDisabled = !current || Boolean(isCommitting);
 
   function commit(listing: Listing, action: 'like' | 'pass') {
     if (committed.current.has(listing.id)) return;
@@ -44,57 +50,105 @@ export function SwipeDeck({
 
   return (
     <View style={styles.container}>
-      {visible.length === 0 ? null : (
-        <View style={styles.stack}>
-          {visible
-            .map((listing, i) => ({ listing, i }))
-            .reverse()
-            .map(({ listing, i }) => (
-              <SwipeCard
-                key={listing.id}
-                ref={i === 0 ? topCardRef : undefined}
-                isTop={i === 0}
-                disabled={i !== 0}
-                onSwipeRight={() => commit(listing, 'like')}
-                onSwipeLeft={() => commit(listing, 'pass')}
-              >
-                <ListingCardFace listing={listing} onPress={() => i === 0 && onOpenListing(listing)} />
-              </SwipeCard>
-            ))}
-        </View>
-      )}
+      <View style={styles.stack}>
+        {visible
+          .map((listing, i) => ({ listing, i }))
+          .reverse()
+          .map(({ listing, i }) => (
+            <SwipeCard
+              key={listing.id}
+              ref={i === 0 ? topCardRef : undefined}
+              isTop={i === 0}
+              depth={i}
+              disabled={i !== 0}
+              onSwipeRight={() => commit(listing, 'like')}
+              onSwipeLeft={() => commit(listing, 'pass')}
+            >
+              <ListingCardFace listing={listing} onPress={() => i === 0 && onOpenListing(listing)} />
+            </SwipeCard>
+          ))}
+      </View>
 
-      <View style={styles.actions}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Pasar esta prenda"
-          disabled={!current}
-          style={[styles.actionButton, styles.passButton, !current && styles.actionButtonDisabled]}
-          onPress={() => topCardRef.current?.swipeLeft()}
-        >
-          <Ionicons name="close" size={28} color={Colors.pass} />
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Me gusta esta prenda"
-          disabled={!current}
-          style={[styles.actionButton, styles.likeButton, !current && styles.actionButtonDisabled]}
-          onPress={() => topCardRef.current?.swipeRight()}
-        >
-          <Ionicons name="heart" size={26} color={Colors.white} />
-        </Pressable>
+      <View style={styles.footer}>
+        <View style={styles.actions}>
+          <DeckButton
+            icon="close"
+            label="Pasar esta prenda"
+            color={Colors.pass}
+            disabled={actionsDisabled}
+            onPress={() => topCardRef.current?.swipeLeft()}
+          />
+          <DeckButton
+            icon="heart"
+            label="Me gusta esta prenda"
+            color={Colors.white}
+            background={Colors.like}
+            disabled={actionsDisabled}
+            onPress={() => topCardRef.current?.swipeRight()}
+          />
+        </View>
+        <Text style={styles.hint}>
+          {remaining > 0
+            ? `Deslizá o usá los botones · quedan ${remaining} ${remaining === 1 ? 'prenda' : 'prendas'}`
+            : 'No quedan prendas por ver'}
+        </Text>
       </View>
     </View>
   );
 }
 
+function DeckButton({
+  icon,
+  label,
+  color,
+  background,
+  disabled,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  color: string;
+  background?: string;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      style={({ pressed }) => [
+        styles.actionButton,
+        background ? { backgroundColor: background } : styles.actionButtonOutlined,
+        !background && { borderColor: color },
+        pressed && !disabled && styles.actionButtonPressed,
+        disabled && styles.actionButtonDisabled,
+      ]}
+    >
+      <Ionicons name={icon} size={28} color={color} />
+    </Pressable>
+  );
+}
+
 function ListingCardFace({ listing, onPress }: { listing: Listing; onPress: () => void }) {
   return (
-    <Pressable style={styles.face} onPress={onPress}>
-      <Image source={{ uri: listing.photos[0] }} style={styles.image} contentFit="cover" />
-      <View style={styles.gradientFooter}>
+    <Pressable
+      style={styles.face}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Ver ${listing.title}, ${formatPrice(listing.price)}, de @${listing.sellerUsername}`}
+    >
+      <ListingPhoto
+        uri={listing.photos[0]}
+        style={styles.image}
+        iconSize={56}
+        label="Esta prenda todavía no tiene foto"
+      />
+      <View style={styles.scrim}>
         <View style={styles.sellerRow}>
-          <Avatar url={listing.sellerAvatarUrl} name={listing.sellerDisplayName} size={28} />
+          <Avatar url={listing.sellerAvatarUrl} name={listing.sellerDisplayName} size={26} />
           <Text style={styles.sellerName}>@{listing.sellerUsername}</Text>
           {listing.sellerIsPro ? <ProBadge /> : null}
         </View>
@@ -103,11 +157,19 @@ function ListingCardFace({ listing, onPress }: { listing: Listing; onPress: () =
         </Text>
         <View style={styles.metaRow}>
           <Text style={styles.price}>{formatPrice(listing.price)}</Text>
-          <Text style={styles.meta}>
-            {listing.size} · {listing.condition}
-          </Text>
+          <View style={styles.metaPill}>
+            <Text style={styles.metaPillText}>Talle {listing.size}</Text>
+          </View>
+          <View style={styles.metaPill}>
+            <Text style={styles.metaPillText}>{listing.condition}</Text>
+          </View>
         </View>
-        {listing.city ? <Text style={styles.city}>📍 {listing.city}</Text> : null}
+        {listing.city ? (
+          <View style={styles.cityRow}>
+            <Ionicons name="location-outline" size={13} color={Colors.white} />
+            <Text style={styles.city}>{listing.city}</Text>
+          </View>
+        ) : null}
       </View>
     </Pressable>
   );
@@ -121,34 +183,36 @@ const styles = StyleSheet.create({
   stack: {
     flex: 1,
     width: '100%',
-    marginBottom: 12,
+    marginBottom: Spacing.lg,
   },
   face: {
     flex: 1,
-    borderRadius: 24,
+    borderRadius: Radius.xxl,
     overflow: 'hidden',
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
+    ...Shadows.card,
   },
   image: {
     flex: 1,
-    backgroundColor: Colors.border,
   },
-  gradientFooter: {
+  scrim: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: Colors.overlay,
-    padding: 16,
-    gap: 4,
+    backgroundColor: Colors.overlayStrong,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.lg,
+    gap: Spacing.xs,
   },
   sellerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
+    gap: Spacing.sm,
+    marginBottom: Spacing.xs,
   },
   sellerName: {
     color: Colors.white,
@@ -157,57 +221,75 @@ const styles = StyleSheet.create({
   },
   title: {
     color: Colors.white,
-    fontWeight: '700',
-    fontSize: 19,
+    fontWeight: '800',
+    fontSize: 20,
+    letterSpacing: -0.2,
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginTop: 2,
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
   },
   price: {
     color: Colors.primarySoft,
     fontWeight: '800',
-    fontSize: 17,
+    fontSize: 18,
   },
-  meta: {
+  metaPill: {
+    paddingHorizontal: Spacing.sm + 2,
+    paddingVertical: 3,
+    borderRadius: Radius.pill,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  metaPillText: {
     color: Colors.white,
-    fontSize: 13,
-    opacity: 0.9,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  cityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    marginTop: 2,
   },
   city: {
     color: Colors.white,
     fontSize: 12,
-    opacity: 0.85,
-    marginTop: 2,
+    opacity: 0.9,
+  },
+  footer: {
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingBottom: Spacing.sm,
   },
   actions: {
     flexDirection: 'row',
-    gap: 24,
-    marginBottom: 8,
+    gap: Spacing.xxl,
   },
   actionButton: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
+    width: 64,
+    height: 64,
+    minWidth: MIN_TOUCH_TARGET,
+    minHeight: MIN_TOUCH_TARGET,
+    borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 2,
-    shadowColor: Colors.black,
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
+    ...Shadows.floating,
+  },
+  actionButtonOutlined: {
+    backgroundColor: Colors.surface,
+    borderWidth: 2,
+  },
+  actionButtonPressed: {
+    transform: [{ scale: 0.94 }],
   },
   actionButtonDisabled: {
     opacity: 0.4,
   },
-  passButton: {
-    backgroundColor: Colors.white,
-    borderWidth: 1.5,
-    borderColor: Colors.pass,
-  },
-  likeButton: {
-    backgroundColor: Colors.like,
+  hint: {
+    ...Typography.micro,
+    textAlign: 'center',
   },
 });
