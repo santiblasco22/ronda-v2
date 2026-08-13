@@ -7,6 +7,7 @@ import { Colors } from '@/constants/colors';
 import { signOut } from '@/features/auth/authApi';
 import { createUserProfile, isUsernameTaken } from '@/features/users/usersApi';
 import { useAuthStore } from '@/store/authStore';
+import { isPermissionDenied } from '@/utils/errors';
 import { validateUsername } from '@/utils/validators';
 
 export default function OnboardingScreen() {
@@ -57,7 +58,13 @@ export default function OnboardingScreen() {
       // El layout de (auth) detecta que ya hay perfil y redirige a las tabs.
     } catch (err) {
       console.warn('[Ronda] Error creando perfil', err);
-      setError('No pudimos crear tu perfil. Volvé a intentarlo.');
+      // La reserva del nombre de usuario es atómica del lado del servidor:
+      // si falla acá es porque alguien lo tomó entre la validación y el alta.
+      setError(
+        isPermissionDenied(err)
+          ? 'Ese nombre de usuario ya está en uso. Probá con otro.'
+          : 'No pudimos crear tu perfil. Volvé a intentarlo.'
+      );
       setLoading(false);
     }
   }

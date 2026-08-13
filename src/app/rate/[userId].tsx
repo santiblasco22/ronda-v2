@@ -11,6 +11,7 @@ import { MAX_RATING_COMMENT_LENGTH } from '@/constants/limits';
 import { useCreateRating, useHasRated } from '@/features/ratings/useRatings';
 import { useUserProfile } from '@/features/users/useUserProfile';
 import { useAuthStore } from '@/store/authStore';
+import { isPermissionDenied } from '@/utils/errors';
 
 export default function RateUserScreen() {
   const params = useLocalSearchParams<{ userId: string; listingId?: string; listingTitle?: string }>();
@@ -18,7 +19,9 @@ export default function RateUserScreen() {
   const myUid = useAuthStore((s) => s.firebaseUid);
   const { data: ratedUser, isLoading } = useUserProfile(params.userId);
   const listingId = params.listingId?.trim() || null;
-  const { data: alreadyRated } = useHasRated(params.userId, listingId);
+  // Una calificación por persona: si ya calificó a este vendedor (desde
+  // cualquier publicación), no puede volver a hacerlo.
+  const { data: alreadyRated } = useHasRated(params.userId);
   const createRating = useCreateRating();
 
   const [stars, setStars] = useState(5);
@@ -57,8 +60,12 @@ export default function RateUserScreen() {
         comment,
       });
       router.back();
-    } catch {
-      setError('No pudimos enviar tu calificación.');
+    } catch (err) {
+      setError(
+        isPermissionDenied(err)
+          ? 'Ya calificaste a esta persona: cada cuenta puede dejar una sola calificación.'
+          : 'No pudimos enviar tu calificación.'
+      );
     }
   }
 

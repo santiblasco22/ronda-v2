@@ -20,6 +20,7 @@ import {
   type ListingSize,
   type ListingStatus,
 } from '@/types/models';
+import { isPermissionDenied } from '@/utils/errors';
 import { validatePrice } from '@/utils/validators';
 
 const STATUS_OPTIONS: { value: ListingStatus; label: string }[] = [
@@ -87,7 +88,18 @@ function EditListingForm({ listing }: { listing: Listing }) {
 
   function handleStatusChange(next: ListingStatus) {
     if (next === listing.status) return;
-    setStatus.mutate({ listingId: listing.id, nextStatus: next, previousStatus: listing.status });
+    setStatus.mutate(
+      { listingId: listing.id, nextStatus: next, previousStatus: listing.status },
+      {
+        onError: (err) => {
+          setError(
+            isPermissionDenied(err)
+              ? 'No podés reactivar esta publicación: llegaste al límite de publicaciones activas de tu plan.'
+              : 'No pudimos cambiar el estado de la publicación.'
+          );
+        },
+      }
+    );
   }
 
   function handleDelete() {

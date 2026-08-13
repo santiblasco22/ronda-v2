@@ -113,6 +113,13 @@ Escaneá el QR con la app Expo Go (Android) o la cámara (iOS), o presioná `i`
 | `npm run web`       | Corre la versión web (soporte parcial)        |
 | `npm run lint`      | ESLint (`eslint-config-expo`)                 |
 | `npm run typecheck` | Chequeo de tipos con `tsc --noEmit`           |
+| `npm run test:rules`| Tests de `firestore.rules` contra el emulador |
+
+`npm run test:rules` levanta el emulador de Firestore (necesita Java 11+ y
+descarga `firebase-tools` con `npx` la primera vez) y corre
+`tests/rules/firestore.test.mjs`, que verifica cada garantía de seguridad
+descrita más abajo. No toca ningún proyecto real: usa el proyecto de mentira
+`demo-ronda-rules`.
 
 ## Modelo de datos (Firestore)
 
@@ -121,10 +128,16 @@ users/{uid}
   username, usernameLower, displayName, bio, avatarUrl, city,
   socialLinks: { instagram?, whatsapp?, facebook? },
   isPro, proSince,
-  listingCount, activeListingCount,      ← contadores denormalizados
-  followerCount, followingCount,         ← contadores denormalizados
-  ratingAvg, ratingCount,                ← contadores denormalizados
+  activeListingCount, lastListingOpId,   ← cupo del plan (ver más abajo)
+  listingCount, followerCount, followingCount, ratingAvg, ratingCount,
+                                         ← reservados para Cloud Functions:
+                                           ningún cliente puede escribirlos
   createdAt, updatedAt
+
+usernames/{usernameLower}                → { uid, createdAt }
+  Índice de unicidad: el id del documento ES el nombre de usuario, así que
+  reservarlo dos veces falla del lado del servidor. Se escribe en el mismo
+  batch que el perfil.
 
   users/{uid}/following/{targetUid}      → { uid, username, displayName, avatarUrl, createdAt }
   users/{uid}/followers/{followerUid}    → { uid, username, displayName, avatarUrl, createdAt }
@@ -140,7 +153,7 @@ listings/{listingId}
   likeCount,
   createdAt, updatedAt
 
-ratings/{ratingId}   (inmutables una vez creadas)
+ratings/{raterId}__{ratedUserId}   (id determinístico, inmutables)
   raterId, raterUsername, raterDisplayName, raterAvatarUrl,  ← denormalizado de quien califica
   ratedUserId, listingId?, listingTitle?,
   stars (1-5), comment,
@@ -152,31 +165,83 @@ pro_account_requests/{requestId}
   reviewerNote, createdAt, reviewedAt
 ```
 
-### Contadores denormalizados y límites conocidos
+## Seguridad: qué garantizan las reglas
 
-Este scaffold **no usa Cloud Functions**. Los contadores
-(`followerCount`, `followingCount`, `listingCount`, `activeListingCount`,
-`ratingAvg`, `ratingCount`) se recalculan y escriben desde el propio cliente
-dueño del documento:
+Este proyecto **no usa Cloud Functions**, así que todo lo que se puede
+garantizar se garantiza en `firestore.rules`. Cada punto de esta lista tiene
+un test en `tests/rules/firestore.test.mjs` (`npm run test:rules`):
 
-- `listingCount` / `activeListingCount`: se actualizan de forma atómica
-  cuando el vendedor crea, cambia el estado o borra su propia publicación
-  (siempre auto-escritura, es seguro).
-- `followingCount`: se actualiza cuando el propio usuario sigue/deja de
-  seguir a alguien (auto-escritura).
-- `followerCount` y `ratingAvg`/`ratingCount`: dependen de acciones de
-  **otros** usuarios (que te sigan, que te califiquen). Por eso se
-  recalculan mediante `refreshOwnAggregates()` (consultas de conteo +
-  promedio) cada vez que el propio usuario abre la pestaña "Perfil". Esto
-  significa que estos números pueden estar unos segundos/minutos
-  desactualizados hasta que el usuario dueño vuelva a abrir su perfil.
+- **Números sociales no falsificables.** `followerCount`, `followingCount`,
+  `listingCount`, `ratingAvg` y `ratingCount` viven en el documento pero
+  **ningún cliente puede escribirlos**. La app no los lee: calcula los
+  números al vuelo con agregaciones del servidor (`getUserStats()`), así que
+  lo que ve el resto siempre sale de las colecciones de origen.
+- **Tope de publicaciones activas aplicado por el servidor.**
+  `activeListingCount` es el único contador escribible, porque las reglas lo
+  necesitan para el tope del plan (FREE 15 / PRO 50, igual que
+  `src/constants/limits.ts`). Solo puede moverse ±1 y siempre en el mismo
+  batch que la publicación que lo justifica: crear, archivar/vender o
+  reactivar. Las reglas comparan el estado de `listings/{id}` antes
+  (`get()`) y después (`getAfter()`) del write, así que el mismo id no
+  sirve dos veces para descontar cupo. Como una publicación activa no se
+  puede borrar (hay que archivarla primero), no existe forma de bajar el
+  contador sin dejar rastro.
+- **Identidad no suplantable.** Los campos denormalizados (`seller*` en
+  listings, `rater*` en ratings, `user*` en solicitudes PRO) se validan
+  contra `users/{uid}`: no se puede publicar a nombre de otra persona ni
+  pintarse la insignia PRO. `isPro`, `username` y `createdAt` son inmutables
+  desde el cliente.
+- **Likes idempotentes.** `likeCount` solo puede subir de a 1, y únicamente
+  en el mismo write que crea `users/{uid}/interactions/{listingId}`, que es
+  inmutable. Resultado: como mucho un like por persona y publicación, sin
+  forma de restar ni de "re-likear" borrando el historial.
+- **Una calificación por par de usuarios.** El id de `ratings` es
+  `{raterId}__{ratedUserId}` y solo se permite `create`, así que la unicidad
+  la impone Firestore. Tampoco se pueden editar ni borrar.
+- **Follows simétricos.** `users/A/following/B` y `users/B/followers/A` se
+  crean en el mismo write o no se crea ninguno, y nadie puede agregarse
+  seguidores ajenos.
+- **Notificaciones no forjables.** Solo se pueden crear como efecto de una
+  acción real verificable en el mismo write (empezar a seguir o calificar),
+  con `data.uid` == quien la manda. Los avisos de cuenta PRO no se pueden
+  emitir desde el cliente.
+- **Nombre de usuario único.** Se reserva en `usernames/{usernameLower}`
+  dentro del mismo batch que el alta del perfil.
 
-Para producción, la recomendación es mover este mantenimiento a **Cloud
-Functions** (Firestore triggers `onCreate`/`onDelete` en `followers`,
-`ratings`, etc.) para que los contadores sean 100% autoritativos e
-inmediatos. Las reglas de seguridad (`firestore.rules`) están escritas para
-que ningún cliente pueda alterar los contadores de **otro** usuario ni
-otorgarse `isPro` a sí mismo.
+### Pendientes para Cloud Functions
+
+Hay cosas que no se pueden resolver bien sin backend. Cuando el proyecto pase
+a plan Blaze, estos son los triggers a escribir (y, al hacerlo, conviene
+volver a leer los números desde el documento en vez de agregarlos en cada
+pantalla):
+
+| Trigger | Qué haría | Por qué no se puede desde el cliente |
+| --- | --- | --- |
+| `onCreate`/`onDelete` en `users/{uid}/followers/**` | Mantener `followerCount` / `followingCount` | Escribiría el documento de **otra** persona; hoy la app cuenta con `getCountFromServer` en cada visita al perfil |
+| `onCreate` en `ratings/**` | Mantener `ratingAvg` / `ratingCount` | Ídem: el promedio vive en el perfil calificado |
+| `onWrite` en `listings/**` | Ser la única fuente de `activeListingCount` y `listingCount` | Hoy el cliente lo mueve ±1 con el par verificado por reglas; con CF se le puede negar la escritura por completo |
+| `onUpdate` en `pro_account_requests/**` | Aplicar `isPro` al aprobar y avisar al usuario | `isPro` y las notificaciones de PRO están bloqueadas para todo cliente |
+| `onCreate` en `users/{uid}/notifications/**` | Enviar push (FCM / Expo) | No hay integración de push todavía |
+
+Mientras tanto, el costo de calcular los números al vuelo es bajo: son
+agregaciones del lado del servidor (`count()` / `average()`), no descargan
+documentos.
+
+### Índices
+
+Cada consulta de la app tiene su índice en `firestore.indexes.json`:
+
+| Consulta | Índice |
+| --- | --- |
+| Descubrir / Buscar: `status == 'active'` + `createdAt desc` | `listings(status, createdAt desc)` |
+| Mis publicaciones y perfil ajeno: `sellerId ==` + `createdAt desc` | `listings(sellerId, createdAt desc)` |
+| Feed de seguidos: `sellerId in` + `status ==` + `createdAt desc`, y el conteo de publicaciones activas del perfil | `listings(sellerId, status, createdAt desc)` |
+| Calificaciones recibidas: `ratedUserId ==` + `createdAt desc` (y el promedio del perfil) | `ratings(ratedUserId, createdAt desc)` |
+| Última solicitud PRO: `userId ==` + `createdAt desc` | `pro_account_requests(userId, createdAt desc)` |
+
+"¿Ya califiqué a esta persona?" y "¿está libre este nombre de usuario?" ya no
+son consultas: son lecturas por id (`ratings/{raterId}__{ratedUserId}` y
+`usernames/{usernameLower}`), así que no necesitan índice.
 
 ### Cuentas PRO
 
@@ -187,10 +252,14 @@ directamente el documento en `users/{uid}` y en la solicitud). Es la única
 pieza de moderación manual del MVP; documentarla acá para que no se confunda
 con un bug.
 
-Límites de publicaciones activas (`src/constants/limits.ts`):
+Límites de publicaciones activas (`src/constants/limits.ts`, replicados en
+`firestore.rules`):
 
-- Cuenta gratuita: 5 publicaciones activas.
+- Cuenta gratuita: 15 publicaciones activas.
 - Cuenta PRO: 50 publicaciones activas.
+
+Si cambiás estos números hay que tocar los dos lados (y el test
+`aplica el tope FREE de 15 publicaciones activas` avisa si se desincronizan).
 
 ## Búsqueda
 
@@ -227,8 +296,10 @@ Ver `src/utils/deepLinks.ts`.
 ## Notificaciones (stub)
 
 `users/{uid}/notifications` guarda avisos in-app (nuevo seguidor, nueva
-calificación) que se crean directamente desde el cliente que dispara la
-acción (ver reglas de seguridad). La pestaña "Avisos" los lista y permite
+calificación) que crea el cliente que dispara la acción, **en el mismo write
+que la acción**: las reglas rechazan cualquier aviso que no venga acompañado
+del follow o de la calificación que lo justifica, así que no se pueden
+inventar ni usar para spamear. La pestaña "Avisos" los lista y permite
 marcarlos como leídos. No hay integración con push notifications (FCM/Expo
 Notifications) todavía — es el siguiente paso natural para pasar de "stub" a
 notificaciones reales.
@@ -277,11 +348,13 @@ real conectado (dos cuentas de prueba ayudan a probar follow/rating):
 14. Cambiar el estado a "Vendido" y a "Archivado" → debe desaparecer de
     Descubrir/Buscar (ambos solo muestran `active`) y el contador
     `activeListingCount` debe bajar.
-15. Alcanzar el límite de publicaciones activas (5 en cuenta gratuita) →
+15. Alcanzar el límite de publicaciones activas (15 en cuenta gratuita) →
     "Publicar" debe bloquearse con un aviso, hasta archivar/vender alguna o
-    pedir cuenta PRO.
-16. Eliminar una publicación → debe desaparecer de todos lados y ajustar los
-    contadores.
+    pedir cuenta PRO. El tope también lo aplican las reglas: aunque se fuerce
+    el alta, Firestore la rechaza.
+16. Eliminar una publicación activa → la app la archiva primero (liberando el
+    cupo) y después la borra; debe desaparecer de todos lados y el contador
+    tiene que quedar bien.
 
 ### Descubrimiento (swipe) y feed
 
@@ -290,6 +363,9 @@ real conectado (dos cuentas de prueba ayudan a probar follow/rating):
     la cola) y sumar 1 al `likeCount` de la publicación.
 18. Deslizar a la izquierda (o tocar la X) → debe registrar un "paso" y
     tampoco volver a aparecer.
+18b. Tocar el corazón dos veces muy rápido, o tocar el botón mientras se
+    arrastra la carta → debe registrarse **una sola** interacción y avanzar
+    una sola carta.
 19. Seguir a un vendedor y verificar que sus publicaciones activas aparecen
     en la pestaña "Siguiendo".
 
@@ -305,9 +381,10 @@ real conectado (dos cuentas de prueba ayudan a probar follow/rating):
     Facebook → debe abrir la app o el navegador con el deep link
     correspondiente (si el vendedor cargó esa red).
 22. Calificar a un vendedor (desde el detalle de una publicación o desde su
-    perfil) con estrellas + comentario → debe generarle una notificación y,
-    al volver a intentar calificar la misma publicación, debe avisar que ya
-    lo calificaste.
+    perfil) con estrellas + comentario → debe generarle una notificación y
+    subir el promedio que se ve en su perfil. Al volver a entrar a
+    "Calificar" (desde cualquier publicación de esa persona) debe avisar que
+    ya la calificaste: es una calificación por cuenta.
 
 ### Cuenta PRO
 
@@ -323,10 +400,22 @@ real conectado (dos cuentas de prueba ayudan a probar follow/rating):
     cuenta → debe aparecer en "Avisos" con el badge de no leído en la tab, y
     marcarse como leída al abrirla.
 
-## Verificación automática incluida en este PR
+### Rutas protegidas
+
+26. Con la sesión cerrada, abrir un deep link a una pantalla interna
+    (`ronda://listing/new`, `ronda://edit-profile`, `ronda://user/<uid>`) →
+    debe redirigir al login, no mostrar una pantalla vacía.
+27. Con sesión iniciada pero sin perfil creado (registro a medias), cualquier
+    ruta interna debe llevar al onboarding.
+
+## Verificación automática
 
 - `npm run typecheck` (TypeScript en modo estricto) sin errores.
 - `npm run lint` (ESLint con `eslint-config-expo`) sin errores.
-- `npx expo export --platform web` genera correctamente las 28 rutas
-  estáticas de la app (smoke test de que todas las pantallas montan sin
-  errores de import/render).
+- `npm run test:rules`: tests de las reglas de seguridad contra el emulador
+  de Firestore (tope FREE/PRO, contadores, likes idempotentes, unicidad de
+  calificaciones y de nombres de usuario, follows simétricos y
+  notificaciones no forjables).
+- `npx expo export --platform web` genera correctamente las rutas estáticas
+  de la app (smoke test de que todas las pantallas montan sin errores de
+  import/render).
