@@ -93,7 +93,6 @@ export const Typography = {
     fontWeight: '700',
     color: Colors.textMuted,
     letterSpacing: 0.45,
-    textTransform: 'uppercase',
   },
 } satisfies Record<string, TextStyle>;
 

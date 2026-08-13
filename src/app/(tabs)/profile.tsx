@@ -164,7 +164,11 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xxl,
     marginBottom: Spacing.md,
   },
-  sectionEyebrow: { ...Typography.micro, color: Colors.primaryInk },
+  sectionEyebrow: {
+    ...Typography.micro,
+    color: Colors.primaryInk,
+    textTransform: 'uppercase',
+  },
   sectionTitle: { ...Typography.heading, fontSize: 20 },
   sectionLinkButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: Spacing.sm },
   sectionLink: { ...Typography.label, color: Colors.primaryInk },

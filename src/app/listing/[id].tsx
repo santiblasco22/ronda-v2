@@ -126,9 +126,7 @@ export default function ListingDetailScreen() {
             {listing.likeCount > 0 ? (
               <View style={styles.metaItem}>
                 <Ionicons name="heart" size={14} color={Colors.like} />
-                <Text style={styles.meta}>
-                  {listing.likeCount} {listing.likeCount === 1 ? 'me gusta' : 'me gusta'}
-                </Text>
+                <Text style={styles.meta}>{listing.likeCount} me gusta</Text>
               </View>
             ) : null}
           </View>
@@ -262,7 +260,12 @@ const styles = StyleSheet.create({
     borderTopRightRadius: Radius.xxl,
     backgroundColor: Colors.background,
   },
-  eyebrow: { ...Typography.micro, color: Colors.primaryInk, marginTop: Spacing.sm },
+  eyebrow: {
+    ...Typography.micro,
+    color: Colors.primaryInk,
+    marginTop: Spacing.sm,
+    textTransform: 'uppercase',
+  },
   titleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -299,6 +302,7 @@ const styles = StyleSheet.create({
   tagLabel: {
     ...Typography.micro,
     fontWeight: '600',
+    textTransform: 'uppercase',
   },
   metaRow: {
     flexDirection: 'row',
@@ -365,7 +369,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sectionTitleText: { flex: 1 },
-  sectionEyebrow: { ...Typography.micro, color: Colors.primaryInk },
+  sectionEyebrow: {
+    ...Typography.micro,
+    color: Colors.primaryInk,
+    textTransform: 'uppercase',
+  },
   sectionTitle: {
     ...Typography.sectionTitle,
     fontSize: 16,

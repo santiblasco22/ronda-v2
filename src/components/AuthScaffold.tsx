@@ -113,7 +113,11 @@ const styles = StyleSheet.create({
   intro: { marginTop: Spacing.xxl, marginBottom: Spacing.xl, gap: Spacing.sm },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   thread: { width: 24, height: 3, borderRadius: Radius.pill, backgroundColor: Colors.primary },
-  eyebrow: { ...Typography.micro, color: Colors.primaryInk },
+  eyebrow: {
+    ...Typography.micro,
+    color: Colors.primaryInk,
+    textTransform: 'uppercase',
+  },
   title: { ...Typography.display },
   subtitle: { ...Typography.body, color: Colors.textMuted, maxWidth: 360 },
   formCard: {

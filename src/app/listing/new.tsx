@@ -156,7 +156,11 @@ const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: Colors.background },
   container: { padding: Spacing.lg, paddingBottom: Spacing.jumbo, gap: Spacing.lg },
   intro: { paddingHorizontal: Spacing.xs, marginBottom: Spacing.xs },
-  eyebrow: { ...Typography.micro, color: Colors.primaryInk },
+  eyebrow: {
+    ...Typography.micro,
+    color: Colors.primaryInk,
+    textTransform: 'uppercase',
+  },
   title: { ...Typography.title, marginTop: Spacing.xs },
   subtitle: { ...Typography.body, color: Colors.textMuted, marginTop: Spacing.sm },
   quotaPill: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginTop: Spacing.lg, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.pill, backgroundColor: Colors.butterSoft },

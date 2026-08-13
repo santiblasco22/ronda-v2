@@ -182,6 +182,6 @@ const styles = StyleSheet.create({
   },
   stat: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', gap: 1 },
   statNumber: { ...Typography.heading, fontSize: 18, lineHeight: 22 },
-  statLabel: { ...Typography.micro, fontSize: 9 },
+  statLabel: { ...Typography.micro, fontSize: 9, textTransform: 'uppercase' },
   statDivider: { width: 1, height: 28, backgroundColor: Colors.border },
 });

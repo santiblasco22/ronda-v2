@@ -107,7 +107,7 @@ export function SwipeDeck({
             />
             <DeckButton
               icon="heart"
-              text="Guardar"
+              text="Me gusta"
               label="Me gusta esta prenda"
               color={Colors.white}
               background={Colors.like}
@@ -231,6 +231,7 @@ const styles = StyleSheet.create({
   deckStatusText: {
     ...Typography.micro,
     color: Colors.plum,
+    textTransform: 'uppercase',
   },
   deckCount: {
     ...Typography.micro,
@@ -267,7 +268,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.successSoft,
     marginBottom: Spacing.sm,
   },
-  completeEyebrow: { ...Typography.micro, color: Colors.successInk },
+  completeEyebrow: {
+    ...Typography.micro,
+    color: Colors.successInk,
+    textTransform: 'uppercase',
+  },
   completeTitle: { ...Typography.heading, textAlign: 'center' },
   completeBody: { ...Typography.caption, textAlign: 'center' },
   face: {

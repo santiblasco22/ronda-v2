@@ -107,13 +107,17 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  formEyebrow: { ...Typography.micro, color: Colors.primaryInk },
+  formEyebrow: {
+    ...Typography.micro,
+    color: Colors.primaryInk,
+    textTransform: 'uppercase',
+  },
   formTitle: { ...Typography.heading, marginTop: Spacing.xs, marginBottom: Spacing.xl },
   fields: { marginBottom: -Spacing.sm },
   primary: { marginTop: Spacing.lg },
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, marginVertical: Spacing.lg },
   divider: { flex: 1, height: 1, backgroundColor: Colors.border },
-  dividerText: { ...Typography.micro, fontSize: 10 },
+  dividerText: { ...Typography.micro, fontSize: 10, textTransform: 'uppercase' },
   signupRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' },
   footerText: { ...Typography.caption },
   signupButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: Spacing.sm },

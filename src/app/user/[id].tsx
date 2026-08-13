@@ -129,7 +129,11 @@ const styles = StyleSheet.create({
   actionsRow: { flexDirection: 'row', alignSelf: 'stretch', gap: Spacing.sm, marginTop: Spacing.md },
   actionButton: { flex: 1 },
   sectionHeading: { paddingHorizontal: Spacing.lg, marginTop: Spacing.xxl, marginBottom: Spacing.md },
-  sectionEyebrow: { ...Typography.micro, color: Colors.primaryInk },
+  sectionEyebrow: {
+    ...Typography.micro,
+    color: Colors.primaryInk,
+    textTransform: 'uppercase',
+  },
   sectionTitle: { ...Typography.heading, marginTop: 2 },
   grid: { paddingHorizontal: Spacing.lg, gap: Spacing.lg },
   column: { gap: Spacing.lg },

@@ -1,6 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Tabs } from 'expo-router';
+import { View } from 'react-native';
 import type { ColorValue } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Colors } from '@/constants/colors';
 import { Radius, Typography } from '@/constants/theme';
@@ -8,6 +10,7 @@ import { useNotifications } from '@/features/notifications/useNotifications';
 import { useAuthStore } from '@/store/authStore';
 
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
   const firebaseUid = useAuthStore((s) => s.firebaseUid);
   const profile = useAuthStore((s) => s.profile);
   const { data: notifications } = useNotifications();
@@ -29,9 +32,8 @@ export default function TabsLayout() {
         tabBarStyle: {
           backgroundColor: Colors.surface,
           borderTopColor: Colors.border,
-          height: 72,
           paddingTop: 7,
-          paddingBottom: 8,
+          paddingBottom: insets.bottom,
         },
         tabBarLabelStyle: { fontSize: 11, fontWeight: Typography.micro.fontWeight },
         tabBarBadgeStyle: {
@@ -102,10 +104,7 @@ function TabIcon({
   focused: boolean;
 }) {
   return (
-    <Ionicons
-      name={name}
-      size={21}
-      color={focused ? Colors.textOnDark : color}
+    <View
       style={
         focused
           ? {
@@ -117,6 +116,8 @@ function TabIcon({
             }
           : undefined
       }
-    />
+    >
+      <Ionicons name={name} size={21} color={focused ? Colors.textOnDark : color} />
+    </View>
   );
 }

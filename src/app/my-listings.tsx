@@ -84,7 +84,11 @@ export default function MyListingsScreen() {
 
 const styles = StyleSheet.create({
   header: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.lg },
-  eyebrow: { ...Typography.micro, color: Colors.primaryInk },
+  eyebrow: {
+    ...Typography.micro,
+    color: Colors.primaryInk,
+    textTransform: 'uppercase',
+  },
   title: { ...Typography.title, marginTop: Spacing.xs },
   summary: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, marginTop: Spacing.lg, padding: Spacing.lg, borderRadius: Radius.xl, backgroundColor: Colors.butterSoft, borderWidth: 1, borderColor: Colors.borderStrong },
   summaryIcon: { width: 42, height: 42, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.surface },

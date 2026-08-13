@@ -97,6 +97,7 @@ const styles = StyleSheet.create({
     ...Typography.micro,
     color: Colors.primaryInk,
     marginBottom: Spacing.xs,
+    textTransform: 'uppercase',
   },
   loadingContainer: {
     flex: 1,

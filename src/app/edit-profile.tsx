@@ -120,7 +120,11 @@ const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: Colors.background },
   container: { padding: Spacing.lg, paddingBottom: Spacing.jumbo, gap: Spacing.lg },
   intro: { paddingHorizontal: Spacing.xs, marginBottom: Spacing.xs },
-  eyebrow: { ...Typography.micro, color: Colors.primaryInk },
+  eyebrow: {
+    ...Typography.micro,
+    color: Colors.primaryInk,
+    textTransform: 'uppercase',
+  },
   title: { ...Typography.title, marginTop: Spacing.xs },
   subtitle: { ...Typography.body, color: Colors.textMuted, marginTop: Spacing.sm },
   avatarBlock: { alignItems: 'center', gap: Spacing.md, marginBottom: Spacing.sm },

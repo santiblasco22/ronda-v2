@@ -95,6 +95,7 @@ const styles = StyleSheet.create({
   eyebrow: {
     ...Typography.micro,
     color: Colors.primaryInk,
+    textTransform: 'uppercase',
   },
   title: {
     ...Typography.title,

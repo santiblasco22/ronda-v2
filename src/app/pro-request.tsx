@@ -91,7 +91,11 @@ const styles = StyleSheet.create({
   container: { padding: Spacing.lg, paddingBottom: Spacing.jumbo, gap: Spacing.lg },
   hero: { alignItems: 'center', paddingHorizontal: Spacing.md, paddingBottom: Spacing.sm },
   heroIcon: { width: 64, height: 64, borderRadius: Radius.xl, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.butter, borderWidth: 1.5, borderColor: Colors.text, transform: [{ rotate: '-4deg' }], marginBottom: Spacing.lg },
-  eyebrow: { ...Typography.micro, color: Colors.primaryInk },
+  eyebrow: {
+    ...Typography.micro,
+    color: Colors.primaryInk,
+    textTransform: 'uppercase',
+  },
   title: { ...Typography.title, textAlign: 'center', marginTop: Spacing.xs },
   subtitle: { ...Typography.body, color: Colors.textMuted, textAlign: 'center', marginTop: Spacing.md },
   benefits: { flexDirection: 'row', gap: Spacing.md },

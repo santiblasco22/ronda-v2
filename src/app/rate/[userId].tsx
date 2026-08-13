@@ -84,7 +84,11 @@ const styles = StyleSheet.create({
   container: { padding: Spacing.lg, paddingBottom: Spacing.jumbo, gap: Spacing.lg },
   hero: { alignItems: 'center', paddingHorizontal: Spacing.md, paddingBottom: Spacing.sm },
   avatarWrap: { padding: 4, borderRadius: Radius.pill, backgroundColor: Colors.butter, marginBottom: Spacing.lg, transform: [{ rotate: '-3deg' }] },
-  eyebrow: { ...Typography.micro, color: Colors.primaryInk },
+  eyebrow: {
+    ...Typography.micro,
+    color: Colors.primaryInk,
+    textTransform: 'uppercase',
+  },
   title: { ...Typography.title, fontSize: 25, textAlign: 'center', marginTop: Spacing.xs },
   subtitle: { ...Typography.body, color: Colors.textMuted, textAlign: 'center', marginTop: Spacing.sm },
   starsBlock: { alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.md },

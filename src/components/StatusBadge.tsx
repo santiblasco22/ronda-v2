@@ -48,6 +48,7 @@ const styles = StyleSheet.create({
   label: {
     ...Typography.micro,
     fontWeight: '700',
+    textTransform: 'uppercase',
   },
   proBadge: {
     backgroundColor: Colors.butter,

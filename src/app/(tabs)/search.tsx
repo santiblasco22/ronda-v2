@@ -336,6 +336,7 @@ const styles = StyleSheet.create({
   },
   activeFiltersText: {
     ...Typography.micro,
+    textTransform: 'uppercase',
   },
   clearFilters: {
     ...Typography.micro,
@@ -353,7 +354,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingBottom: Spacing.xs,
   },
-  resultsEyebrow: { ...Typography.micro, color: Colors.primaryInk },
+  resultsEyebrow: {
+    ...Typography.micro,
+    color: Colors.primaryInk,
+    textTransform: 'uppercase',
+  },
   resultsCount: { ...Typography.caption, fontWeight: '700' },
   column: {
     gap: Spacing.lg,
