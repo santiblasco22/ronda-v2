@@ -6,20 +6,55 @@ gusten y contactalos directamente por Instagram, WhatsApp o Facebook. No hay
 pagos, envíos, billetera ni chat dentro de la app — el contacto y el acuerdo
 de venta se hacen por fuera, en las redes del vendedor.
 
-Este repo es un scaffold de MVP: prioriza tener pantallas funcionando de
-punta a punta por sobre el pulido visual o la cobertura de casos borde.
-
 ## Stack técnico
 
 - **Expo + TypeScript + Expo Router** (app única en la raíz del repo, sin
   monorepo).
-- **Firebase**: Auth (email/contraseña + Google), Firestore, Storage.
+- **Firebase**: Auth (email/contraseña + Google) y Firestore. Storage es
+  **opcional** (ver "Fotos" más abajo).
 - **TanStack Query** para el estado de servidor (fetch/cache/mutaciones) y
   **Zustand** para estado de cliente (sesión de auth, filtros de búsqueda).
 - **react-native-gesture-handler + react-native-reanimated** para el mazo de
   swipe de Descubrir.
-- UI en español, sin librerías de componentes externas (estilos con
-  `StyleSheet` planos, a propósito, para mantener el scaffold simple).
+- UI en español, sin librerías de componentes externas: los estilos se
+  componen con los tokens de `src/constants/theme.ts` (ver "Sistema visual").
+
+## Sistema visual
+
+`src/constants/theme.ts` define la escala de espaciado (múltiplos de 4), los
+radios, las sombras y la escala tipográfica; `src/constants/colors.ts` define
+la paleta. Las pantallas componen esos tokens en vez de inventar números
+sueltos, así el ritmo vertical y el peso del texto son iguales en toda la app.
+
+Sobre contraste y objetivos táctiles:
+
+- El naranja de marca es claro, así que los rellenos primarios llevan **tinta
+  oscura** encima (6.7:1) en vez de blanco (2.3:1, ilegible al sol).
+- Para texto e iconos naranjas sobre fondo claro existe `primaryInk` (4.7:1);
+  lo mismo con `dangerInk` y `successInk`. Todos los pares de color usados
+  llegan al mínimo AA de 4.5:1.
+- Botones, chips, campos e iconos accionables miden al menos 44 px
+  (`MIN_TOUCH_TARGET`), usando `hitSlop` cuando el dibujo es más chico.
+- Los controles llevan `accessibilityRole`, `accessibilityLabel` y
+  `accessibilityState`, y los contadores anuncian su significado completo
+  ("Calificación 4.5 de 5, 12 opiniones").
+
+## Fotos (Firebase Storage opcional)
+
+Storage requiere plan Blaze, y Ronda está pensada para funcionar sin él: las
+fotos son una mejora, no un requisito.
+
+- Por defecto las subidas están **apagadas**
+  (`EXPO_PUBLIC_ENABLE_PHOTO_UPLOADS=false`).
+- Con las fotos apagadas se publica igual: las reglas aceptan publicaciones
+  sin imagen, las tarjetas y el mazo de swipe muestran un marcador de posición
+  cuidado, y los selectores de foto explican por qué están deshabilitados en
+  vez de fallar al tocarlos.
+- Si el proyecto sí tiene Storage, poné `EXPO_PUBLIC_ENABLE_PHOTO_UPLOADS=true`
+  y el selector aparece con normalidad (hasta 5 fotos por publicación).
+- Si una subida falla igual, el error se traduce al español distinguiendo
+  "no hay almacenamiento disponible" de "revisá tu conexión"
+  (`src/lib/photoUploads.ts`).
 
 ## Estructura del proyecto
 
@@ -61,8 +96,9 @@ npm install
 
 1. Creá un proyecto en <https://console.firebase.google.com>.
 2. Habilitá **Authentication** → método **Email/contraseña** y **Google**.
-3. Creá una base de **Firestore** (modo producción) y un bucket de
-   **Storage**.
+3. Creá una base de **Firestore** (modo producción). El bucket de **Storage**
+   es opcional: solo hace falta si vas a habilitar las fotos (requiere plan
+   Blaze, ver "Fotos" más arriba).
 4. En "Configuración del proyecto" → "Tus apps", registrá una app web y
    copiá las credenciales del SDK.
 
@@ -91,7 +127,10 @@ Con la [CLI de Firebase](https://firebase.google.com/docs/cli):
 ```bash
 firebase login
 firebase use --add   # elegí tu proyecto
-firebase deploy --only firestore:rules,firestore:indexes,storage:rules
+firebase deploy --only firestore:rules,firestore:indexes
+
+# Solo si habilitaste Storage:
+firebase deploy --only storage:rules
 ```
 
 ### 5. Correr la app
@@ -348,10 +387,14 @@ real conectado (dos cuentas de prueba ayudan a probar follow/rating):
 
 ### Publicaciones (listings)
 
-11. Publicar una prenda con 1 a 5 fotos, completando categoría/talle/estado/
-    precio → debe aparecer en "Mis publicaciones" y en Descubrir/Buscar de
-    otras cuentas.
-12. Intentar subir una 6ª foto → el selector debe bloquear el límite de 5.
+11. Publicar una prenda completando categoría/talle/estado/precio → debe
+    aparecer en "Mis publicaciones" y en Descubrir/Buscar de otras cuentas.
+    Con `EXPO_PUBLIC_ENABLE_PHOTO_UPLOADS=false` (el default) la publicación
+    tiene que crearse **sin fotos**, mostrando el marcador de posición en la
+    tarjeta, en el mazo de swipe y en el detalle; el selector de fotos tiene
+    que explicar por qué está deshabilitado en vez de fallar al tocarlo.
+12. Con las fotos habilitadas, intentar subir una 6ª foto → el selector debe
+    bloquear el límite de 5.
 13. Editar una publicación (texto, fotos, precio) → los cambios deben
     reflejarse en el detalle.
 14. Cambiar el estado a "Vendido" y a "Archivado" → debe desaparecer de
@@ -414,6 +457,20 @@ real conectado (dos cuentas de prueba ayudan a probar follow/rating):
     quedar **un solo** aviso de "nuevo seguidor" (se reescribe), no uno por
     cada vez. Y al dejar de seguir, el perfil no puede quedar con el
     seguidor contado de más.
+
+### Estados vacíos y presentación
+
+28. Entrar a cada pestaña sin datos (cuenta nueva) → Descubrir, Siguiendo,
+    Buscar, Avisos y Perfil tienen que mostrar un estado vacío en español que
+    explique qué pasa y ofrezca la acción siguiente, nunca una lista en blanco.
+    "Siguiendo" distingue "todavía no seguís a nadie" de "los que seguís no
+    tienen publicaciones activas".
+29. Buscar algo inexistente con filtros puestos → estado vacío con la acción
+    "Limpiar filtros" (distinto del estado "todavía no hay prendas
+    publicadas").
+30. Con el lector de pantalla activado, recorrer el mazo de swipe, las
+    tarjetas y los contadores del perfil → cada control tiene que anunciarse
+    con su etiqueta y su estado.
 
 ### Rutas protegidas
 
