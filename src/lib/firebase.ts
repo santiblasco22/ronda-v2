@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { type FirebaseApp, getApps, initializeApp } from 'firebase/app';
+// @ts-expect-error Firebase web auth types omit RN-only getReactNativePersistence.
 import { type Auth, getAuth, getReactNativePersistence, initializeAuth } from 'firebase/auth';
 import { type Firestore, getFirestore } from 'firebase/firestore';
 import { type FirebaseStorage, getStorage } from 'firebase/storage';
