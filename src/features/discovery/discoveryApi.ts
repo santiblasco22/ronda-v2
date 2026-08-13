@@ -1,6 +1,7 @@
 import { collection, doc, getDocs, increment, writeBatch } from 'firebase/firestore';
 
 import { getActiveListingsExcluding, getFollowingFeed } from '@/features/listings/listingsApi';
+import { getFollowing } from '@/features/users/usersApi';
 import { db } from '@/lib/firebase';
 import type { InteractionAction, Listing } from '@/types/models';
 
@@ -9,9 +10,45 @@ export async function getSwipedListingIds(uid: string): Promise<Set<string>> {
   return new Set(snap.docs.map((d) => d.id));
 }
 
-export async function getDiscoveryQueue(uid: string): Promise<Listing[]> {
-  const swiped = await getSwipedListingIds(uid);
-  return getActiveListingsExcluding(swiped, uid);
+function normalizedCity(city: string | undefined): string {
+  return (city ?? '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+/**
+ * Ranking simple y explicable para el MVP: vendedores seguidos primero,
+ * luego publicaciones de la misma ciudad (si el perfil tiene una) y, dentro
+ * de cada grupo, las más recientes. No altera el array de entrada.
+ */
+export function rankDiscoveryListings(
+  listings: Listing[],
+  followedSellerIds: Set<string>,
+  viewerCity?: string
+): Listing[] {
+  const city = normalizedCity(viewerCity);
+
+  return [...listings].sort((a, b) => {
+    const followedDifference =
+      Number(followedSellerIds.has(b.sellerId)) - Number(followedSellerIds.has(a.sellerId));
+    if (followedDifference !== 0) return followedDifference;
+
+    if (city) {
+      const cityDifference =
+        Number(normalizedCity(b.city) === city) - Number(normalizedCity(a.city) === city);
+      if (cityDifference !== 0) return cityDifference;
+    }
+
+    return b.createdAt - a.createdAt;
+  });
+}
+
+export async function getDiscoveryQueue(uid: string, viewerCity?: string): Promise<Listing[]> {
+  const [swiped, following] = await Promise.all([getSwipedListingIds(uid), getFollowing(uid)]);
+  const listings = await getActiveListingsExcluding(swiped, uid);
+  return rankDiscoveryListings(listings, new Set(following.map((edge) => edge.uid)), viewerCity);
 }
 
 /**

@@ -68,7 +68,7 @@ export default function UserProfileScreen() {
                 variant="outline"
                 icon="star-outline"
                 style={styles.actionButton}
-                onPress={() => router.push({ pathname: '/rate/[userId]', params: { userId: profile.uid, listingId: '', listingTitle: '' } })}
+                onPress={() => router.push({ pathname: '/rate/[userId]', params: { userId: profile.uid } })}
               />
             </View>
           ) : null}

@@ -9,9 +9,10 @@ import { getDiscoveryQueue, getFollowingFeedFor, recordInteraction } from './dis
 
 export function useDiscoveryQueue() {
   const uid = useAuthStore((s) => s.firebaseUid);
+  const city = useAuthStore((s) => s.profile?.city);
   return useQuery({
-    queryKey: queryKeys.discoveryQueue(uid ?? 'unknown', null),
-    queryFn: () => getDiscoveryQueue(uid as string),
+    queryKey: queryKeys.discoveryQueue(uid ?? 'unknown', { city: city ?? null }),
+    queryFn: () => getDiscoveryQueue(uid as string, city),
     enabled: Boolean(uid),
   });
 }
