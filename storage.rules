@@ -1,0 +1,42 @@
+rules_version = '2';
+
+// -----------------------------------------------------------------------
+// Reglas de seguridad de Storage para Ronda.
+// Estructura de carpetas:
+//   avatars/{uid}/...        -> foto de perfil del usuario {uid}
+//   listings/{sellerId}/{listingId}/... -> fotos de una publicación
+// -----------------------------------------------------------------------
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    function isUnder5MB() {
+      return request.resource.size < 5 * 1024 * 1024;
+    }
+
+    match /avatars/{uid}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == uid && isImage() && isUnder5MB();
+      allow delete: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    match /listings/{sellerId}/{listingId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == sellerId && isImage() && isUnder5MB();
+      allow delete: if isSignedIn() && request.auth.uid == sellerId;
+    }
+
+    // Cualquier otra ruta queda bloqueada por defecto.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
