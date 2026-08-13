@@ -31,6 +31,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.1",
     "@types/react": "~19.2.2",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~57.0.1",
@@ -42,7 +43,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:rules": "npx --yes firebase-tools@15 emulators:exec --only firestore --project demo-ronda-rules \"node --test tests/rules/firestore.test.mjs\""
   },
   "private": true
 }
