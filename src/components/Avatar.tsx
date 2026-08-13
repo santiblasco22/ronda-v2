@@ -16,24 +16,37 @@ export function Avatar({
   const dimensionStyle = { width: size, height: size, borderRadius: size / 2 };
 
   if (url) {
-    return <Image source={{ uri: url }} style={dimensionStyle} contentFit="cover" />;
+    return (
+      <Image
+        source={{ uri: url }}
+        style={[styles.image, dimensionStyle]}
+        contentFit="cover"
+        transition={160}
+        accessibilityIgnoresInvertColors
+      />
+    );
   }
 
   return (
     <View style={[styles.fallback, dimensionStyle]}>
-      <Text style={[styles.initials, { fontSize: size * 0.36 }]}>{initialsFromName(name)}</Text>
+      <Text style={[styles.initials, { fontSize: Math.round(size * 0.36) }]}>
+        {initialsFromName(name)}
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  image: {
+    backgroundColor: Colors.surfaceMuted,
+  },
   fallback: {
     backgroundColor: Colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   initials: {
-    color: Colors.primaryDark,
+    color: Colors.primaryInk,
     fontWeight: '700',
   },
 });

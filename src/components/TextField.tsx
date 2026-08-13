@@ -1,52 +1,113 @@
+import { useState } from 'react';
 import { StyleSheet, Text, TextInput, type TextInputProps, View } from 'react-native';
 
 import { Colors } from '@/constants/colors';
+import { MIN_TOUCH_TARGET, Radius, Spacing, Typography } from '@/constants/theme';
 
 interface TextFieldProps extends TextInputProps {
   label?: string;
   error?: string | null;
+  /** Ayuda debajo del campo (se reemplaza por el error si lo hay). */
+  hint?: string;
+  /** Muestra "12/60" usando maxLength. */
+  showCounter?: boolean;
 }
 
-export function TextField({ label, error, style, ...rest }: TextFieldProps) {
+export function TextField({
+  label,
+  error,
+  hint,
+  showCounter,
+  style,
+  value,
+  maxLength,
+  onFocus,
+  onBlur,
+  ...rest
+}: TextFieldProps) {
+  const [focused, setFocused] = useState(false);
+  const counter = showCounter && maxLength ? `${value?.length ?? 0}/${maxLength}` : null;
+
   return (
     <View style={styles.container}>
-      {label ? <Text style={styles.label}>{label}</Text> : null}
+      {label || counter ? (
+        <View style={styles.labelRow}>
+          {label ? <Text style={styles.label}>{label}</Text> : <View />}
+          {counter ? <Text style={styles.counter}>{counter}</Text> : null}
+        </View>
+      ) : null}
       <TextInput
         placeholderTextColor={Colors.textMuted}
-        style={[styles.input, error ? styles.inputError : undefined, style]}
+        accessibilityLabel={label}
+        value={value}
+        maxLength={maxLength}
+        onFocus={(event) => {
+          setFocused(true);
+          onFocus?.(event);
+        }}
+        onBlur={(event) => {
+          setFocused(false);
+          onBlur?.(event);
+        }}
+        style={[
+          styles.input,
+          focused && styles.inputFocused,
+          error ? styles.inputError : undefined,
+          style,
+        ]}
         {...rest}
       />
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? (
+        <Text style={styles.error}>{error}</Text>
+      ) : hint ? (
+        <Text style={styles.hint}>{hint}</Text>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 14,
+    marginBottom: Spacing.lg,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    marginBottom: Spacing.xs + 2,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 6,
+    ...Typography.label,
+  },
+  counter: {
+    ...Typography.micro,
   },
   input: {
+    minHeight: MIN_TOUCH_TARGET,
     backgroundColor: Colors.surface,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
     fontSize: 15,
     color: Colors.text,
   },
+  inputFocused: {
+    borderColor: Colors.primary,
+    borderWidth: 1.5,
+  },
   inputError: {
-    borderColor: Colors.danger,
+    borderColor: Colors.dangerInk,
+    borderWidth: 1.5,
   },
   error: {
-    color: Colors.danger,
-    fontSize: 12,
-    marginTop: 4,
+    ...Typography.caption,
+    color: Colors.dangerInk,
+    marginTop: Spacing.xs + 2,
+  },
+  hint: {
+    ...Typography.caption,
+    marginTop: Spacing.xs + 2,
   },
 });
