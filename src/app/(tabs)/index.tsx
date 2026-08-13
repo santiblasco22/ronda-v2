@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { EmptyState, LoadingView } from '@/components/EmptyState';
 import { Screen } from '@/components/Screen';
@@ -14,15 +15,30 @@ export default function DiscoverScreen() {
   const router = useRouter();
   const { data: listings, isLoading, isError, refetch } = useDiscoveryQueue();
   const recordInteraction = useRecordInteraction();
+  const [deckEpoch, setDeckEpoch] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
 
-  function handleLike(listing: Listing) {
-    recordInteraction.mutate({ listing, action: 'like' });
+  async function handleLike(listing: Listing) {
+    await recordInteraction.mutateAsync({ listing, action: 'like' });
   }
-  function handlePass(listing: Listing) {
-    recordInteraction.mutate({ listing, action: 'pass' });
+  async function handlePass(listing: Listing) {
+    await recordInteraction.mutateAsync({ listing, action: 'pass' });
   }
   function handleOpen(listing: Listing) {
     router.push({ pathname: '/listing/[id]', params: { id: listing.id } });
+  }
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      const result = await refetch();
+      if (!result.error) {
+        // Remonta el mazo con el snapshot fresco del servidor (y limpia committed).
+        setDeckEpoch((epoch) => epoch + 1);
+      }
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   return (
@@ -34,7 +50,18 @@ export default function DiscoverScreen() {
           aparecer esa prenda.
         </Text>
       ) : null}
-      <View style={styles.deckArea}>
+      <ScrollView
+        style={styles.deckArea}
+        contentContainerStyle={styles.deckAreaContent}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void handleRefresh()}
+            tintColor={Colors.primaryInk}
+          />
+        }
+      >
         {isLoading ? (
           <LoadingView label="Buscando prendas…" />
         ) : isError ? (
@@ -55,15 +82,18 @@ export default function DiscoverScreen() {
             onAction={() => router.push('/(tabs)/search')}
           />
         ) : (
-          <SwipeDeck
-            listings={listings}
-            onLike={handleLike}
-            onPass={handlePass}
-            onOpenListing={handleOpen}
-            isCommitting={recordInteraction.isPending}
-          />
+          <View style={styles.deckWrap}>
+            <SwipeDeck
+              key={deckEpoch}
+              listings={listings}
+              onLike={handleLike}
+              onPass={handlePass}
+              onOpenListing={handleOpen}
+              isCommitting={recordInteraction.isPending}
+            />
+          </View>
         )}
-      </View>
+      </ScrollView>
     </Screen>
   );
 }
@@ -71,8 +101,14 @@ export default function DiscoverScreen() {
 const styles = StyleSheet.create({
   deckArea: {
     flex: 1,
+  },
+  deckAreaContent: {
+    flexGrow: 1,
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.sm,
+  },
+  deckWrap: {
+    flex: 1,
   },
   errorBanner: {
     ...Typography.caption,

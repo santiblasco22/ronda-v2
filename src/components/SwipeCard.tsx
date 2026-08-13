@@ -29,21 +29,23 @@ interface SwipeCardProps {
   onSwipeLeft: () => void;
   onSwipeRight: () => void;
   disabled?: boolean;
+  /** Hay un swipe viajando al servidor: no se puede empezar otro gesto. */
+  isCommitting?: boolean;
   isTop: boolean;
   /** Posición en el mazo: 0 es la carta de arriba. */
   depth?: number;
 }
 
 export const SwipeCard = forwardRef<SwipeCardRef, SwipeCardProps>(function SwipeCard(
-  { children, onSwipeLeft, onSwipeRight, disabled, isTop, depth = 0 },
+  { children, onSwipeLeft, onSwipeRight, disabled, isCommitting, isTop, depth = 0 },
   ref
 ) {
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   // La animación de salida se dispara una sola vez desde los botones: sin
   // esto, dos toques seguidos relanzan withTiming y su callback registra el
-  // swipe por duplicado. El gesto no necesita el candado porque al soltar la
-  // carta el mazo ya avanzó y la deshabilita.
+  // swipe por duplicado. El gesto también se apaga con disabled (isCommitting
+  // en la carta de arriba) para no largar otro swipe mientras viaja el anterior.
   const buttonSwipeFired = useRef(false);
 
   const finishSwipe = (direction: 'left' | 'right') => {
@@ -68,7 +70,7 @@ export const SwipeCard = forwardRef<SwipeCardRef, SwipeCardProps>(function Swipe
   }));
 
   const pan = Gesture.Pan()
-    .enabled(!disabled && isTop)
+    .enabled(!disabled && isTop && !isCommitting)
     .onUpdate((event) => {
       translateX.value = event.translationX;
       translateY.value = event.translationY * 0.35;

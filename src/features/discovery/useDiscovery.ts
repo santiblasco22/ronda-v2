@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { useFollowing } from '@/features/users/useUserProfile';
 import { queryKeys } from '@/lib/queryClient';
@@ -18,16 +18,11 @@ export function useDiscoveryQueue() {
 
 export function useRecordInteraction() {
   const uid = useAuthStore((s) => s.firebaseUid);
-  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({ listing, action }: { listing: Listing; action: InteractionAction }) => {
       if (!uid) throw new Error('Necesitás iniciar sesión.');
       return recordInteraction(uid, listing, action);
-    },
-    onSuccess: () => {
-      if (!uid) return;
-      void queryClient.invalidateQueries({ queryKey: queryKeys.discoveryQueue(uid, null) });
     },
   });
 }

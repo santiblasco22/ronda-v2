@@ -22,30 +22,39 @@ export function SwipeDeck({
   isCommitting,
 }: {
   listings: Listing[];
-  onLike: (listing: Listing) => void;
-  onPass: (listing: Listing) => void;
+  onLike: (listing: Listing) => void | Promise<void>;
+  onPass: (listing: Listing) => void | Promise<void>;
   onOpenListing: (listing: Listing) => void;
-  /** Hay un swipe viajando al servidor: los botones se apagan hasta que vuelva. */
+  /** Hay un swipe viajando al servidor: el gesto y los botones se apagan hasta que vuelva. */
   isCommitting?: boolean;
 }) {
-  const [index, setIndex] = useState(0);
+  // El mazo se maneja en local: si filtráramos contra el array del servidor
+  // (o avanzáramos un índice sobre él) un refetch mid-sesión achica la cola
+  // y salta una carta. El padre remonta este componente (key) en mount / pull
+  // to refresh para resincronizar.
+  const [queue, setQueue] = useState(listings);
   const topCardRef = useRef<SwipeCardRef>(null);
   // Red de seguridad final: aunque el gesto y el botón resuelvan la misma
   // carta, cada publicación se registra una única vez. Un doble registro
   // rompería el write (la interacción es inmutable) y descontaría una carta
   // sin haberla mostrado.
   const committed = useRef(new Set<string>());
-  const current = listings[index];
-  const visible = listings.slice(index, index + VISIBLE_STACK);
-  const remaining = Math.max(listings.length - index, 0);
+  const current = queue[0];
+  const visible = queue.slice(0, VISIBLE_STACK);
+  const remaining = queue.length;
   const actionsDisabled = !current || Boolean(isCommitting);
 
-  function commit(listing: Listing, action: 'like' | 'pass') {
+  async function commit(listing: Listing, action: 'like' | 'pass') {
     if (committed.current.has(listing.id)) return;
     committed.current.add(listing.id);
-    if (action === 'like') onLike(listing);
-    else onPass(listing);
-    setIndex((i) => i + 1);
+    setQueue((q) => q.filter((item) => item.id !== listing.id));
+    try {
+      if (action === 'like') await onLike(listing);
+      else await onPass(listing);
+    } catch {
+      committed.current.delete(listing.id);
+      setQueue((q) => [listing, ...q.filter((item) => item.id !== listing.id)]);
+    }
   }
 
   return (
@@ -60,7 +69,8 @@ export function SwipeDeck({
               ref={i === 0 ? topCardRef : undefined}
               isTop={i === 0}
               depth={i}
-              disabled={i !== 0}
+              disabled={i !== 0 || Boolean(isCommitting)}
+              isCommitting={i === 0 && Boolean(isCommitting)}
               onSwipeRight={() => commit(listing, 'like')}
               onSwipeLeft={() => commit(listing, 'pass')}
             >
