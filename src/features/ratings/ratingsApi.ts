@@ -1,10 +1,20 @@
-import { collection, doc, getDocs, orderBy, query, setDoc, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, orderBy, query, where, writeBatch } from 'firebase/firestore';
 
+import { ratingNotificationId } from '@/features/notifications/notificationIds';
 import { db } from '@/lib/firebase';
 import type { Rating, UserProfile } from '@/types/models';
 
 function ratingsCol() {
   return collection(db, 'ratings');
+}
+
+/**
+ * Id determinístico: una calificación por par (quien califica → calificado).
+ * Como las reglas exigen que el id tenga exactamente esta forma y prohíben
+ * update/delete, la unicidad la garantiza Firestore y no la UI.
+ */
+export function ratingIdFor(raterId: string, ratedUserId: string): string {
+  return `${raterId}__${ratedUserId}`;
 }
 
 function fromSnapshot(id: string, data: Record<string, unknown>): Rating {
@@ -29,17 +39,10 @@ export async function getRatingsForUser(uid: string): Promise<Rating[]> {
   return snap.docs.map((d) => fromSnapshot(d.id, d.data()));
 }
 
-export async function hasRated(raterId: string, ratedUserId: string, listingId: string | null) {
-  const q = listingId
-    ? query(
-        ratingsCol(),
-        where('raterId', '==', raterId),
-        where('ratedUserId', '==', ratedUserId),
-        where('listingId', '==', listingId)
-      )
-    : query(ratingsCol(), where('raterId', '==', raterId), where('ratedUserId', '==', ratedUserId));
-  const snap = await getDocs(q);
-  return !snap.empty;
+/** Una sola lectura por id, sin índices compuestos ni consultas. */
+export async function hasRated(raterId: string, ratedUserId: string): Promise<boolean> {
+  const snap = await getDoc(doc(db, 'ratings', ratingIdFor(raterId, ratedUserId)));
+  return snap.exists();
 }
 
 export interface CreateRatingInput {
@@ -51,9 +54,13 @@ export interface CreateRatingInput {
 }
 
 export async function createRating(rater: UserProfile, input: CreateRatingInput): Promise<void> {
-  const newRef = doc(ratingsCol());
-  await setDoc(newRef, {
+  const now = Date.now();
+  const ratingRef = doc(db, 'ratings', ratingIdFor(rater.uid, input.ratedUserId));
+
+  const batch = writeBatch(db);
+  batch.set(ratingRef, {
     raterId: rater.uid,
+    // Validados contra users/{uid} por las reglas.
     raterUsername: rater.username,
     raterDisplayName: rater.displayName,
     raterAvatarUrl: rater.avatarUrl,
@@ -62,15 +69,16 @@ export async function createRating(rater: UserProfile, input: CreateRatingInput)
     listingTitle: input.listingTitle,
     stars: input.stars,
     comment: input.comment.trim(),
-    createdAt: Date.now(),
+    createdAt: now,
   });
-
-  await setDoc(doc(collection(db, 'users', input.ratedUserId, 'notifications')), {
+  batch.set(doc(db, 'users', input.ratedUserId, 'notifications', ratingNotificationId(rater.uid)), {
     type: 'new_rating',
     title: 'Nueva calificación',
     body: `${rater.displayName} te dejó ${input.stars} ${input.stars === 1 ? 'estrella' : 'estrellas'}.`,
     read: false,
-    createdAt: Date.now(),
+    createdAt: now,
     data: { uid: rater.uid },
   });
+
+  await batch.commit();
 }

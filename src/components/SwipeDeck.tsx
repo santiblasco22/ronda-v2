@@ -26,10 +26,19 @@ export function SwipeDeck({
 }) {
   const [index, setIndex] = useState(0);
   const topCardRef = useRef<SwipeCardRef>(null);
+  // Red de seguridad final: aunque el gesto y el botón resuelvan la misma
+  // carta, cada publicación se registra una única vez. Un doble registro
+  // rompería el write (la interacción es inmutable) y descontaría una carta
+  // sin haberla mostrado.
+  const committed = useRef(new Set<string>());
   const current = listings[index];
   const visible = listings.slice(index, index + VISIBLE_STACK);
 
-  function advance() {
+  function commit(listing: Listing, action: 'like' | 'pass') {
+    if (committed.current.has(listing.id)) return;
+    committed.current.add(listing.id);
+    if (action === 'like') onLike(listing);
+    else onPass(listing);
     setIndex((i) => i + 1);
   }
 
@@ -46,14 +55,8 @@ export function SwipeDeck({
                 ref={i === 0 ? topCardRef : undefined}
                 isTop={i === 0}
                 disabled={i !== 0}
-                onSwipeRight={() => {
-                  onLike(listing);
-                  advance();
-                }}
-                onSwipeLeft={() => {
-                  onPass(listing);
-                  advance();
-                }}
+                onSwipeRight={() => commit(listing, 'like')}
+                onSwipeLeft={() => commit(listing, 'pass')}
               >
                 <ListingCardFace listing={listing} onPress={() => i === 0 && onOpenListing(listing)} />
               </SwipeCard>
@@ -63,14 +66,20 @@ export function SwipeDeck({
 
       <View style={styles.actions}>
         <Pressable
-          style={[styles.actionButton, styles.passButton]}
-          onPress={() => current && topCardRef.current?.swipeLeft()}
+          accessibilityRole="button"
+          accessibilityLabel="Pasar esta prenda"
+          disabled={!current}
+          style={[styles.actionButton, styles.passButton, !current && styles.actionButtonDisabled]}
+          onPress={() => topCardRef.current?.swipeLeft()}
         >
           <Ionicons name="close" size={28} color={Colors.pass} />
         </Pressable>
         <Pressable
-          style={[styles.actionButton, styles.likeButton]}
-          onPress={() => current && topCardRef.current?.swipeRight()}
+          accessibilityRole="button"
+          accessibilityLabel="Me gusta esta prenda"
+          disabled={!current}
+          style={[styles.actionButton, styles.likeButton, !current && styles.actionButtonDisabled]}
+          onPress={() => topCardRef.current?.swipeRight()}
         >
           <Ionicons name="heart" size={26} color={Colors.white} />
         </Pressable>
@@ -189,6 +198,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 3 },
+  },
+  actionButtonDisabled: {
+    opacity: 0.4,
   },
   passButton: {
     backgroundColor: Colors.white,

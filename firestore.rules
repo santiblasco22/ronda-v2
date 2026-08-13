@@ -3,96 +3,335 @@ rules_version = '2';
 // -----------------------------------------------------------------------
 // Reglas de seguridad de Firestore para Ronda.
 //
-// Este es un proyecto MVP sin Cloud Functions: todos los contadores
-// denormalizados (followerCount, followingCount, listingCount,
-// activeListingCount, ratingAvg, ratingCount) se recalculan y escriben
-// desde el propio cliente dueño del documento ("self-write only"). Esto es
-// intencional para simplificar el scaffold, pero significa que un cliente
-// malicioso podría, en el peor caso, dejar sus propios contadores
-// desincronizados (nunca los de otro usuario). Para producción se
-// recomienda mover el mantenimiento de contadores a Cloud Functions
-// (Firestore triggers) para que sean 100% autoritativos.
+// Principios:
+//
+// 1. Los contadores sociales (followerCount, followingCount, ratingAvg,
+//    ratingCount, listingCount) NO son escribibles por ningún cliente. La app
+//    los calcula al vuelo desde las subcolecciones/colecciones de origen
+//    (users/{uid}/followers, ratings, listings), así que nadie puede inflar
+//    sus números. Quedan reservados para una Cloud Function futura
+//    (ver README → "Pendientes para Cloud Functions").
+//
+// 2. activeListingCount es el único contador que el cliente puede mover,
+//    porque las reglas lo necesitan para aplicar el límite de publicaciones
+//    activas (FREE/PRO) del lado del servidor. Para que no se pueda falsear,
+//    cada cambio tiene que ir en el mismo batch/transacción que la
+//    publicación que lo justifica (get()/getAfter() sobre listings/{id}) y
+//    solo puede moverse de a ±1.
+//
+// 3. Los campos denormalizados (seller* en listings, rater* en ratings,
+//    user* en pro_account_requests) se validan contra el documento real de
+//    users/{uid}: no se puede publicar en nombre de otra persona ni
+//    auto-otorgarse la insignia PRO.
+//
+// 4. likeCount solo puede subir de a 1 y únicamente en el mismo write que
+//    crea el registro de interacción del usuario (users/{uid}/interactions/
+//    {listingId}), que es inmutable. Eso lo vuelve idempotente: un usuario
+//    puede sumar como máximo un like por publicación, para siempre.
+//
+// 5. Las notificaciones solo se pueden crear como efecto de una acción real
+//    verificable en el mismo write (seguir a alguien / calificarlo).
 // -----------------------------------------------------------------------
-
-function isSignedIn() {
-  return request.auth != null;
-}
-
-function isOwner(uid) {
-  return isSignedIn() && request.auth.uid == uid;
-}
-
-function unchanged(field, resource, request) {
-  return !(field in request.resource.data) ||
-    (field in resource.data && request.resource.data[field] == resource.data[field]);
-}
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
     // ---------------------------------------------------------------
-    // users/{uid}
+    // Helpers
     // ---------------------------------------------------------------
-    match /users/{uid} {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function uid() {
+      return request.auth.uid;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && uid() == userId;
+    }
+
+    function userPath(userId) {
+      return /databases/$(database)/documents/users/$(userId);
+    }
+
+    function listingPath(listingId) {
+      return /databases/$(database)/documents/listings/$(listingId);
+    }
+
+    function ratingPath(ratingId) {
+      return /databases/$(database)/documents/ratings/$(ratingId);
+    }
+
+    function interactionPath(userId, listingId) {
+      return /databases/$(database)/documents/users/$(userId)/interactions/$(listingId);
+    }
+
+    function followerPath(userId, followerId) {
+      return /databases/$(database)/documents/users/$(userId)/followers/$(followerId);
+    }
+
+    function followingPath(userId, targetId) {
+      return /databases/$(database)/documents/users/$(userId)/following/$(targetId);
+    }
+
+    /** Estado del perfil ANTES de este write. */
+    function userBefore(userId) {
+      return get(userPath(userId)).data;
+    }
+
+    /** Estado del perfil DESPUÉS de este write (solo dentro del mismo batch). */
+    function userAfter(userId) {
+      return getAfter(userPath(userId)).data;
+    }
+
+    /** Límite de publicaciones activas según el plan (debe coincidir con src/constants/limits.ts). */
+    function listingCap(userId) {
+      return userBefore(userId).isPro == true ? 50 : 15;
+    }
+
+    /** El id determinístico de una calificación garantiza "una por par de usuarios". */
+    function ratingIdFor(raterId, ratedUserId) {
+      return raterId + '__' + ratedUserId;
+    }
+
+    function usernamePath(usernameLower) {
+      return /databases/$(database)/documents/usernames/$(usernameLower);
+    }
+
+    // ---------------------------------------------------------------
+    // usernames/{usernameLower}
+    // Índice de unicidad de nombres de usuario: el id del documento ES el
+    // nombre, así que crearlo falla si ya existe. Se escribe en el mismo
+    // batch que el perfil (ver users create), y nunca se puede editar ni
+    // borrar: el nombre de usuario es definitivo.
+    // ---------------------------------------------------------------
+    match /usernames/{usernameLower} {
       allow read: if isSignedIn();
 
-      allow create: if isOwner(uid)
+      allow create: if isSignedIn()
+        && request.resource.data.uid == uid()
+        && getAfter(userPath(uid())).data.usernameLower == usernameLower;
+
+      allow update, delete: if false;
+    }
+
+    // ---------------------------------------------------------------
+    // users/{userId}
+    // ---------------------------------------------------------------
+    match /users/{userId} {
+      // Campos que el propio usuario puede editar desde la app.
+      function editableUserKeys() {
+        return ['displayName', 'bio', 'city', 'avatarUrl', 'socialLinks', 'updatedAt',
+                'activeListingCount', 'lastListingOpId'];
+      }
+
+      function validProfileText() {
+        return request.resource.data.displayName is string
+          && request.resource.data.displayName.size() > 0
+          && request.resource.data.displayName.size() <= 60
+          && request.resource.data.bio is string
+          && request.resource.data.bio.size() <= 160
+          && request.resource.data.city is string
+          && request.resource.data.city.size() <= 60;
+      }
+
+      /**
+       * La publicación referenciada por lastListingOpId es la que justifica el
+       * cambio de activeListingCount. Se comprueba su estado antes y después
+       * del write, así que el mismo id no sirve dos veces.
+       */
+      function opPath() {
+        return listingPath(request.resource.data.get('lastListingOpId', ''));
+      }
+
+      function activeDelta() {
+        return request.resource.data.activeListingCount - resource.data.activeListingCount;
+      }
+
+      function underCap() {
+        return resource.data.activeListingCount < listingCap(userId);
+      }
+
+      // +1: se creó una publicación activa nueva en este mismo write.
+      function opIsCreateActive() {
+        return activeDelta() == 1
+          && !exists(opPath())
+          && getAfter(opPath()).data.sellerId == userId
+          && getAfter(opPath()).data.status == 'active'
+          && underCap();
+      }
+
+      // +1: una publicación existente pasó de vendida/archivada a activa.
+      function opIsReactivate() {
+        return activeDelta() == 1
+          && exists(opPath())
+          && get(opPath()).data.sellerId == userId
+          && get(opPath()).data.status != 'active'
+          && getAfter(opPath()).data.status == 'active'
+          && underCap();
+      }
+
+      // -1: una publicación activa pasó a vendida/archivada.
+      function opIsDeactivate() {
+        return activeDelta() == -1
+          && exists(opPath())
+          && get(opPath()).data.sellerId == userId
+          && get(opPath()).data.status == 'active'
+          && getAfter(opPath()).data.status != 'active';
+      }
+
+      function activeCountChangeIsValid() {
+        return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['activeListingCount'])
+          || (
+            request.resource.data.activeListingCount is int
+            && request.resource.data.activeListingCount >= 0
+            && request.resource.data.get('lastListingOpId', '') is string
+            && request.resource.data.get('lastListingOpId', '').size() > 0
+            && (opIsCreateActive() || opIsReactivate() || opIsDeactivate())
+          );
+      }
+
+      allow read: if isSignedIn();
+
+      allow create: if isOwner(userId)
         && request.resource.data.username is string
         && request.resource.data.usernameLower is string
-        && request.resource.data.displayName is string
+        && request.resource.data.usernameLower == request.resource.data.username.lower()
+        && request.resource.data.usernameLower.size() >= 3
+        && request.resource.data.usernameLower.size() <= 20
+        && validProfileText()
         && request.resource.data.isPro == false
-        && request.resource.data.followerCount == 0
-        && request.resource.data.followingCount == 0
+        && request.resource.data.proSince == null
         && request.resource.data.listingCount == 0
         && request.resource.data.activeListingCount == 0
+        && request.resource.data.followerCount == 0
+        && request.resource.data.followingCount == 0
         && request.resource.data.ratingAvg == 0
-        && request.resource.data.ratingCount == 0;
+        && request.resource.data.ratingCount == 0
+        && request.resource.data.createdAt is number
+        // Reserva del nombre de usuario en el mismo write.
+        && getAfter(usernamePath(request.resource.data.usernameLower)).data.uid == userId;
 
-      // El propio usuario puede editar su perfil. isPro solo puede cambiarlo
-      // un proceso de administración (consola / futura Cloud Function), no
-      // el cliente, así que exigimos que se mantenga igual.
-      allow update: if isOwner(uid) && unchanged('isPro', resource, request);
+      // username / usernameLower / isPro / proSince / createdAt y todos los
+      // contadores sociales quedan fuera de la lista blanca: son inmutables
+      // desde el cliente.
+      allow update: if isOwner(userId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(editableUserKeys())
+        && validProfileText()
+        && activeCountChangeIsValid();
 
       allow delete: if false;
 
       // ------------------ following ------------------
-      // uid sigue a following/{targetUid}. Solo el propio uid administra su
-      // lista de "a quién sigo".
-      match /following/{targetUid} {
+      // Solo el dueño administra su lista de "a quién sigo", y siempre en el
+      // mismo write que el registro espejo en followers del otro usuario:
+      // tanto al seguir como al dejar de seguir. Si solo se pudiera borrar una
+      // punta, quedarían seguidores fantasma inflando el contador del otro
+      // perfil (que se calcula justamente contando esa subcolección).
+      match /following/{targetId} {
         allow read: if isSignedIn();
-        allow create, delete: if isOwner(uid) && targetUid != uid;
+
+        allow create: if isOwner(userId)
+          && targetId != userId
+          && request.resource.data.uid == targetId
+          && getAfter(followerPath(targetId, userId)).data.uid == userId;
+
+        allow delete: if isOwner(userId)
+          && !existsAfter(followerPath(targetId, userId));
+
         allow update: if false;
       }
 
       // ------------------ followers ------------------
-      // followers/{followerUid} representa que followerUid sigue a uid.
-      // Solo followerUid puede crear/borrar su propio registro (nadie puede
-      // agregar o quitar seguidores en nombre de otro usuario).
-      match /followers/{followerUid} {
+      // followers/{followerId} significa "followerId sigue a userId": solo
+      // followerId puede crearlo o borrarlo, nunca el dueño del perfil.
+      match /followers/{followerId} {
         allow read: if isSignedIn();
-        allow create, delete: if isSignedIn() && request.auth.uid == followerUid && followerUid != uid;
+
+        allow create: if isOwner(followerId)
+          && followerId != userId
+          && request.resource.data.uid == followerId
+          && getAfter(followingPath(followerId, userId)).data.uid == userId;
+
+        allow delete: if isOwner(followerId)
+          && !existsAfter(followingPath(followerId, userId));
+
         allow update: if false;
       }
 
       // ------------------ interactions (historial de swipes) ------------------
+      // Inmutables: son la garantía de idempotencia de likeCount.
       match /interactions/{listingId} {
-        allow read, create, update, delete: if isOwner(uid);
+        allow read: if isOwner(userId);
+
+        allow create: if isOwner(userId)
+          && request.resource.data.listingId == listingId
+          && request.resource.data.action in ['like', 'pass']
+          && request.resource.data.createdAt is number;
+
+        allow update, delete: if false;
       }
 
       // ------------------ notifications ------------------
+      // El id de cada aviso es determinístico y depende de quién lo manda:
+      // "new_follower__{actorUid}" / "new_rating__{raterId}". Como un batch no
+      // puede escribir dos veces el mismo documento, el emisor no puede
+      // generar más de un aviso por tipo, ni siquiera metiendo N documentos en
+      // el mismo write.
       match /notifications/{notificationId} {
-        allow read, delete: if isOwner(uid);
-        // Cualquier usuario autenticado puede generar una notificación para
-        // otro usuario (ej: "te empezó a seguir", "te calificó"), siempre
-        // que llegue no leída y con la forma esperada.
+        function validNotificationShape() {
+          return request.resource.data.read == false
+            && request.resource.data.createdAt is number
+            && request.resource.data.title is string
+            && request.resource.data.title.size() <= 80
+            && request.resource.data.body is string
+            && request.resource.data.body.size() <= 200
+            && request.resource.data.data.uid == uid();
+        }
+
+        function notifiesRealFollow() {
+          return notificationId == 'new_follower__' + uid()
+            && request.resource.data.type == 'new_follower'
+            && !exists(followerPath(userId, uid()))
+            && getAfter(followerPath(userId, uid())).data.uid == uid();
+        }
+
+        function notifiesRealRating() {
+          return notificationId == 'new_rating__' + uid()
+            && request.resource.data.type == 'new_rating'
+            && !exists(ratingPath(ratingIdFor(uid(), userId)))
+            && getAfter(ratingPath(ratingIdFor(uid(), userId))).data.ratedUserId == userId;
+        }
+
+        allow read, delete: if isOwner(userId);
+
+        // Otro usuario solo puede notificarte como efecto de una acción real
+        // que ocurre en este mismo write (seguirte o calificarte). Los avisos
+        // de cuenta PRO los tiene que emitir una Cloud Function con permisos
+        // de administrador (ver README).
         allow create: if isSignedIn()
-          && request.resource.data.read == false
-          && request.resource.data.type is string
-          && request.resource.data.title is string
-          && request.resource.data.body is string;
-        // Solo el dueño puede marcarla como leída.
-        allow update: if isOwner(uid)
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+          && userId != uid()
+          && validNotificationShape()
+          && (notifiesRealFollow() || notifiesRealRating());
+
+        allow update: if
+          // El dueño solo puede marcarla como leída.
+          (
+            isOwner(userId)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+            && request.resource.data.read == true
+          )
+          // Volver a seguir después de un unfollow reescribe ese mismo aviso.
+          // Sigue haciendo falta que el follow ocurra en este write y que
+          // antes no fuera seguidor, así que sigue siendo un aviso por ciclo
+          // de seguir/dejar de seguir, nunca uno nuevo.
+          || (
+            isSignedIn()
+            && userId != uid()
+            && validNotificationShape()
+            && notifiesRealFollow()
+          );
       }
     }
 
@@ -100,65 +339,144 @@ service cloud.firestore {
     // listings/{listingId}
     // ---------------------------------------------------------------
     match /listings/{listingId} {
+      function sellerDenormMatchesProfile() {
+        return request.resource.data.sellerUsername == userBefore(uid()).username
+          && request.resource.data.sellerDisplayName == userBefore(uid()).displayName
+          && request.resource.data.sellerAvatarUrl == userBefore(uid()).avatarUrl
+          && request.resource.data.sellerIsPro == userBefore(uid()).isPro;
+      }
+
+      function validListingContent() {
+        return request.resource.data.title is string
+          && request.resource.data.title.size() > 0
+          && request.resource.data.title.size() <= 60
+          && request.resource.data.description is string
+          && request.resource.data.description.size() <= 500
+          && request.resource.data.price is number
+          && request.resource.data.price > 0
+          && request.resource.data.photos is list
+          // 0 fotos es válido a propósito: Storage puede estar deshabilitado
+          // (plan Spark) y la publicación tiene que poder crearse igual.
+          && request.resource.data.photos.size() <= 5
+          && request.resource.data.status in ['active', 'sold', 'archived']
+          && request.resource.data.keys().hasAll(['category', 'size', 'condition', 'color', 'city']);
+      }
+
+      // Crear una publicación activa exige subir activeListingCount en el
+      // mismo write, y solo se permite si todavía queda cupo en el plan.
+      function pairedWithCounterIncrement() {
+        return userBefore(uid()).activeListingCount < listingCap(uid())
+          && userAfter(uid()).activeListingCount == userBefore(uid()).activeListingCount + 1
+          && userAfter(uid()).lastListingOpId == listingId;
+      }
+
+      /**
+       * El cupo del plan cuenta publicaciones activas, así que solo importa
+       * cuando el estado cruza la frontera activa/no activa. Pasar de vendida
+       * a archivada (o al revés) no mueve el cupo y no necesita —ni admite—
+       * tocar el contador.
+       */
+      function crossesActiveBoundary() {
+        return (resource.data.status == 'active') != (request.resource.data.status == 'active');
+      }
+
+      function statusChangeIsPaired() {
+        return !crossesActiveBoundary()
+          || (
+            userAfter(uid()).lastListingOpId == listingId
+            && userAfter(uid()).activeListingCount ==
+              userBefore(uid()).activeListingCount +
+                (request.resource.data.status == 'active' ? 1 : -1)
+          );
+      }
+
+      function isSellerEdit() {
+        return resource.data.sellerId == uid()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'title', 'description', 'price', 'category', 'size', 'condition',
+              'color', 'city', 'photos', 'status', 'updatedAt'])
+          && validListingContent()
+          && statusChangeIsPaired();
+      }
+
+      // Cualquier usuario autenticado puede sumar exactamente 1 like, y solo
+      // junto con su registro de interacción (que es inmutable) → como mucho
+      // un like por usuario y publicación, sin forma de restar.
+      function isIdempotentLike() {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount'])
+          && request.resource.data.likeCount == resource.data.likeCount + 1
+          && !exists(interactionPath(uid(), listingId))
+          && getAfter(interactionPath(uid(), listingId)).data.action == 'like';
+      }
+
       allow read: if isSignedIn();
 
       allow create: if isSignedIn()
-        && request.resource.data.sellerId == request.auth.uid
-        && request.resource.data.title is string
-        && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 60
-        && request.resource.data.price is number && request.resource.data.price > 0
-        && request.resource.data.photos is list
-        && request.resource.data.photos.size() >= 1 && request.resource.data.photos.size() <= 5
-        && request.resource.data.status in ['active', 'sold', 'archived']
-        && request.resource.data.likeCount == 0;
+        && request.resource.data.sellerId == uid()
+        && sellerDenormMatchesProfile()
+        && validListingContent()
+        && request.resource.data.status == 'active'
+        && request.resource.data.likeCount == 0
+        && request.resource.data.createdAt is number
+        && request.resource.data.updatedAt is number
+        && pairedWithCounterIncrement();
 
-      // El vendedor puede editar su propia publicación (título, fotos,
-      // estado, etc). Cualquier usuario autenticado puede además sumar o
-      // restar 1 al likeCount (efecto de un "me gusta" al deslizar), sin
-      // tocar ningún otro campo.
-      allow update: if isSignedIn() && (
-        (
-          resource.data.sellerId == request.auth.uid &&
-          unchanged('sellerId', resource, request) &&
-          request.resource.data.photos is list &&
-          request.resource.data.photos.size() >= 1 && request.resource.data.photos.size() <= 5 &&
-          request.resource.data.status in ['active', 'sold', 'archived']
-        ) ||
-        (
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount']) &&
-          (request.resource.data.likeCount == resource.data.likeCount + 1 ||
-            request.resource.data.likeCount == resource.data.likeCount - 1)
-        )
-      );
+      allow update: if isSignedIn() && (isSellerEdit() || isIdempotentLike());
 
-      allow delete: if isSignedIn() && resource.data.sellerId == request.auth.uid;
+      // Solo se pueden borrar publicaciones que no estén activas, para que
+      // activeListingCount no pueda bajar sin dejar rastro. La app archiva
+      // primero y borra después.
+      allow delete: if isSignedIn()
+        && resource.data.sellerId == uid()
+        && resource.data.status != 'active';
     }
 
     // ---------------------------------------------------------------
-    // ratings/{ratingId}  (inmutables una vez creadas)
+    // ratings/{ratingId}  (id determinístico "<raterId>__<ratedUserId>")
+    // Inmutables y únicas: una calificación por par de usuarios.
     // ---------------------------------------------------------------
     match /ratings/{ratingId} {
       allow read: if isSignedIn();
+
       allow create: if isSignedIn()
-        && request.resource.data.raterId == request.auth.uid
-        && request.resource.data.ratedUserId != request.auth.uid
+        && ratingId == ratingIdFor(uid(), request.resource.data.ratedUserId)
+        && request.resource.data.raterId == uid()
+        && request.resource.data.ratedUserId is string
+        && request.resource.data.ratedUserId != uid()
+        && exists(userPath(request.resource.data.ratedUserId))
+        && request.resource.data.raterUsername == userBefore(uid()).username
+        && request.resource.data.raterDisplayName == userBefore(uid()).displayName
+        && request.resource.data.raterAvatarUrl == userBefore(uid()).avatarUrl
         && request.resource.data.stars is number
-        && request.resource.data.stars >= 1 && request.resource.data.stars <= 5;
+        && request.resource.data.stars >= 1
+        && request.resource.data.stars <= 5
+        && request.resource.data.comment is string
+        && request.resource.data.comment.size() <= 300
+        && request.resource.data.createdAt is number;
+
       allow update, delete: if false;
     }
 
     // ---------------------------------------------------------------
     // pro_account_requests/{requestId}
-    // Solo el propio usuario puede crear y leer sus solicitudes. La
-    // aprobación/rechazo se hace manualmente desde la consola de Firebase
-    // (o una futura Cloud Function con permisos de administrador), por lo
-    // que no se permite update/delete desde el cliente.
+    // La aprobación/rechazo se hace fuera de la app (consola de Firebase o
+    // Cloud Function con permisos de administrador).
     // ---------------------------------------------------------------
     match /pro_account_requests/{requestId} {
-      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.userId == uid();
+
       allow create: if isSignedIn()
-        && request.resource.data.userId == request.auth.uid
-        && request.resource.data.status == 'pending';
+        && request.resource.data.userId == uid()
+        && request.resource.data.userUsername == userBefore(uid()).username
+        && request.resource.data.userDisplayName == userBefore(uid()).displayName
+        && request.resource.data.status == 'pending'
+        && request.resource.data.reviewerNote == null
+        && request.resource.data.reviewedAt == null
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.message.size() <= 500
+        && request.resource.data.createdAt is number;
+
       allow update, delete: if false;
     }
   }

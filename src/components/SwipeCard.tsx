@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle } from 'react';
+import { forwardRef, useImperativeHandle, useRef } from 'react';
 import { Dimensions, StyleSheet, Text } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -35,6 +35,11 @@ export const SwipeCard = forwardRef<SwipeCardRef, SwipeCardProps>(function Swipe
 ) {
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
+  // La animación de salida se dispara una sola vez desde los botones: sin
+  // esto, dos toques seguidos relanzan withTiming y su callback registra el
+  // swipe por duplicado. El gesto no necesita el candado porque al soltar la
+  // carta el mazo ya avanzó y la deshabilita.
+  const buttonSwipeFired = useRef(false);
 
   const finishSwipe = (direction: 'left' | 'right') => {
     const target = direction === 'right' ? SCREEN_WIDTH * 1.5 : -SCREEN_WIDTH * 1.5;
@@ -45,8 +50,16 @@ export const SwipeCard = forwardRef<SwipeCardRef, SwipeCardProps>(function Swipe
   };
 
   useImperativeHandle(ref, () => ({
-    swipeLeft: () => finishSwipe('left'),
-    swipeRight: () => finishSwipe('right'),
+    swipeLeft: () => {
+      if (buttonSwipeFired.current) return;
+      buttonSwipeFired.current = true;
+      finishSwipe('left');
+    },
+    swipeRight: () => {
+      if (buttonSwipeFired.current) return;
+      buttonSwipeFired.current = true;
+      finishSwipe('right');
+    },
   }));
 
   const pan = Gesture.Pan()

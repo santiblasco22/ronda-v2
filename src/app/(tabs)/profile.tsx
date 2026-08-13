@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter } from 'expo-router';
-import { useEffect } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
@@ -16,7 +15,7 @@ import { getListingCapFor } from '@/constants/limits';
 import { signOut } from '@/features/auth/authApi';
 import { useMyListings } from '@/features/listings/useListings';
 import { useLatestProRequest } from '@/features/pro/useProRequest';
-import { useRefreshOwnAggregates } from '@/features/users/useUserProfile';
+import { useUserStats } from '@/features/users/useUserProfile';
 import { useAuthStore } from '@/store/authStore';
 
 export default function ProfileScreen() {
@@ -24,12 +23,7 @@ export default function ProfileScreen() {
   const profile = useAuthStore((s) => s.profile);
   const { data: listings } = useMyListings();
   const { data: proRequest } = useLatestProRequest();
-  const refreshAggregates = useRefreshOwnAggregates();
-
-  useEffect(() => {
-    refreshAggregates.mutate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { data: stats } = useUserStats(profile?.uid);
 
   if (!profile) return null;
 
@@ -56,18 +50,18 @@ export default function ProfileScreen() {
           {profile.city ? <Text style={styles.city}>📍 {profile.city}</Text> : null}
           {profile.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
 
-          <RatingStars value={profile.ratingAvg} count={profile.ratingCount} showValue size={18} />
+          <RatingStars value={stats?.ratingAvg ?? 0} count={stats?.ratingCount ?? 0} showValue size={18} />
 
           <View style={styles.statsRow}>
             <Link href={{ pathname: '/followers/[id]', params: { id: profile.uid } }} asChild>
-              <Pressable style={styles.stat}>
-                <Text style={styles.statNumber}>{profile.followerCount}</Text>
+              <Pressable style={styles.stat} accessibilityRole="button">
+                <Text style={styles.statNumber}>{formatCount(stats?.followers)}</Text>
                 <Text style={styles.statLabel}>Seguidores</Text>
               </Pressable>
             </Link>
             <Link href={{ pathname: '/following/[id]', params: { id: profile.uid } }} asChild>
-              <Pressable style={styles.stat}>
-                <Text style={styles.statNumber}>{profile.followingCount}</Text>
+              <Pressable style={styles.stat} accessibilityRole="button">
+                <Text style={styles.statNumber}>{formatCount(stats?.following)}</Text>
                 <Text style={styles.statLabel}>Siguiendo</Text>
               </Pressable>
             </Link>
@@ -134,6 +128,11 @@ export default function ProfileScreen() {
       </ScrollView>
     </Screen>
   );
+}
+
+/** Mientras la agregación viaja mostramos un guion en vez de un cero falso. */
+function formatCount(value: number | undefined): string {
+  return value === undefined ? '—' : String(value);
 }
 
 const styles = StyleSheet.create({

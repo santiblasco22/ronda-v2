@@ -7,9 +7,9 @@ import {
   increment,
   orderBy,
   query,
-  setDoc,
   updateDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 
 import { db } from '@/lib/firebase';
@@ -25,6 +25,10 @@ import type {
 
 function listingsCol() {
   return collection(db, 'listings');
+}
+
+function isActive(status: ListingStatus): boolean {
+  return status === 'active';
 }
 
 function fromSnapshot(id: string, data: Record<string, unknown>): Listing {
@@ -63,11 +67,6 @@ export async function getListingsBySeller(sellerId: string): Promise<Listing[]> 
   return snap.docs.map((d) => fromSnapshot(d.id, d.data()));
 }
 
-export async function getActiveListingsBySeller(sellerId: string): Promise<Listing[]> {
-  const listings = await getListingsBySeller(sellerId);
-  return listings.filter((l) => l.status === 'active');
-}
-
 export interface CreateListingInput {
   title: string;
   description: string;
@@ -80,13 +79,21 @@ export interface CreateListingInput {
   localPhotoUris: string[];
 }
 
+/**
+ * Alta de publicación. El documento y el contador de publicaciones activas
+ * del vendedor viajan en el mismo batch porque las reglas exigen ese par:
+ * es lo que hace que el tope FREE/PRO se aplique del lado del servidor y no
+ * solo en la UI.
+ */
 export async function createListing(seller: UserProfile, input: CreateListingInput): Promise<string> {
   const newRef = doc(listingsCol());
   const photos = await uploadListingPhotos(seller.uid, newRef.id, input.localPhotoUris);
   const now = Date.now();
 
-  await setDoc(newRef, {
+  const batch = writeBatch(db);
+  batch.set(newRef, {
     sellerId: seller.uid,
+    // Las reglas verifican que estos campos coincidan con users/{uid}.
     sellerUsername: seller.username,
     sellerDisplayName: seller.displayName,
     sellerAvatarUrl: seller.avatarUrl,
@@ -105,11 +112,12 @@ export async function createListing(seller: UserProfile, input: CreateListingInp
     createdAt: now,
     updatedAt: now,
   });
-
-  await updateDoc(doc(db, 'users', seller.uid), {
-    listingCount: increment(1),
+  batch.update(doc(db, 'users', seller.uid), {
     activeListingCount: increment(1),
+    lastListingOpId: newRef.id,
+    updatedAt: now,
   });
+  await batch.commit();
 
   return newRef.id;
 }
@@ -152,40 +160,50 @@ export async function updateListing(
   await updateDoc(doc(db, 'listings', listingId), patch);
 }
 
+/**
+ * Cambiar el estado de una publicación mueve el cupo de publicaciones
+ * activas. Igual que en el alta, las reglas exigen que ambos writes vayan
+ * juntos (y que quede cupo si se está reactivando).
+ */
 export async function setListingStatus(
   sellerId: string,
   listingId: string,
   nextStatus: ListingStatus,
   previousStatus: ListingStatus
 ): Promise<void> {
-  await updateDoc(doc(db, 'listings', listingId), {
-    status: nextStatus,
-    updatedAt: Date.now(),
-  });
+  const now = Date.now();
+  const listingRef = doc(db, 'listings', listingId);
+  const changesActiveSlot = isActive(previousStatus) !== isActive(nextStatus);
 
-  const wasActive = previousStatus === 'active';
-  const isActive = nextStatus === 'active';
-  if (wasActive !== isActive) {
-    await updateDoc(doc(db, 'users', sellerId), {
-      activeListingCount: increment(isActive ? 1 : -1),
-    });
+  if (!changesActiveSlot) {
+    await updateDoc(listingRef, { status: nextStatus, updatedAt: now });
+    return;
   }
+
+  const batch = writeBatch(db);
+  batch.update(listingRef, { status: nextStatus, updatedAt: now });
+  batch.update(doc(db, 'users', sellerId), {
+    activeListingCount: increment(isActive(nextStatus) ? 1 : -1),
+    lastListingOpId: listingId,
+    updatedAt: now,
+  });
+  await batch.commit();
 }
 
+/**
+ * Las reglas no permiten borrar una publicación activa (si no, el contador
+ * podría bajar sin dejar rastro), así que primero se archiva —liberando el
+ * cupo de forma auditable— y recién después se elimina.
+ */
 export async function deleteListing(
   sellerId: string,
   listingId: string,
   wasActive: boolean
 ): Promise<void> {
+  if (wasActive) {
+    await setListingStatus(sellerId, listingId, 'archived', 'active');
+  }
   await deleteDoc(doc(db, 'listings', listingId));
-  await updateDoc(doc(db, 'users', sellerId), {
-    listingCount: increment(-1),
-    activeListingCount: wasActive ? increment(-1) : increment(0),
-  });
-}
-
-export async function incrementListingLikes(listingId: string, delta: 1 | -1): Promise<void> {
-  await updateDoc(doc(db, 'listings', listingId), { likeCount: increment(delta) });
 }
 
 export interface SearchFiltersInput {
@@ -226,9 +244,9 @@ export async function searchActiveListings(filters: SearchFiltersInput): Promise
     results = results.filter((l) => l.price <= filters.maxPrice!);
   }
   if (filters.query?.trim()) {
-    const q2 = filters.query.trim().toLowerCase();
+    const needle = filters.query.trim().toLowerCase();
     results = results.filter(
-      (l) => l.title.toLowerCase().includes(q2) || l.description.toLowerCase().includes(q2)
+      (l) => l.title.toLowerCase().includes(needle) || l.description.toLowerCase().includes(needle)
     );
   }
   return results;

@@ -10,6 +10,7 @@ import { Colors } from '@/constants/colors';
 import { getListingCapFor, MAX_LISTING_DESCRIPTION_LENGTH, MAX_LISTING_TITLE_LENGTH } from '@/constants/limits';
 import { useCreateListing } from '@/features/listings/useListings';
 import { useAuthStore } from '@/store/authStore';
+import { isPermissionDenied } from '@/utils/errors';
 import {
   LISTING_CATEGORIES,
   LISTING_CONDITIONS,
@@ -65,8 +66,14 @@ export default function NewListingScreen() {
         localPhotoUris: photos.map((p) => p.uri),
       });
       router.replace({ pathname: '/listing/[id]', params: { id } });
-    } catch {
-      setError('No pudimos publicar tu prenda. Intentá de nuevo.');
+    } catch (err) {
+      // El tope del plan también se aplica en las reglas de Firestore, así
+      // que puede rebotar acá aunque la UI creyera que había cupo.
+      setError(
+        isPermissionDenied(err)
+          ? `Llegaste al límite de ${cap} publicaciones activas. Archivá o marcá como vendida alguna para publicar otra.`
+          : 'No pudimos publicar tu prenda. Intentá de nuevo.'
+      );
     }
   }
 

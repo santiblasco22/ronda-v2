@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { getUserProfile } from '@/features/users/usersApi';
 import { queryKeys } from '@/lib/queryClient';
 import { useAuthStore } from '@/store/authStore';
 import type { Listing, ListingStatus } from '@/types/models';
@@ -16,6 +17,29 @@ import {
   type UpdateListingInput,
   updateListing,
 } from './listingsApi';
+
+/**
+ * Después de cualquier alta/baja/cambio de estado hay que releer el perfil:
+ * activeListingCount es lo que las reglas usan para aplicar el tope del plan,
+ * así que la UI tiene que trabajar siempre con el valor real del servidor.
+ */
+function useRefreshSellerState() {
+  const queryClient = useQueryClient();
+  const uid = useAuthStore((s) => s.firebaseUid);
+  const setProfile = useAuthStore((s) => s.setProfile);
+
+  return async () => {
+    if (!uid) return;
+    const fresh = await getUserProfile(uid);
+    setProfile(fresh);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.myListings(uid) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.userListings(uid) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.userProfile(uid) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.userStats(uid) }),
+    ]);
+  };
+}
 
 export function useListing(id: string | undefined) {
   return useQuery({
@@ -50,19 +74,15 @@ export function useSearchListings(filters: SearchFiltersInput) {
 }
 
 export function useCreateListing() {
-  const queryClient = useQueryClient();
   const profile = useAuthStore((s) => s.profile);
+  const refreshSellerState = useRefreshSellerState();
 
   return useMutation({
     mutationFn: (input: CreateListingInput) => {
       if (!profile) throw new Error('Necesitás iniciar sesión.');
       return createListing(profile, input);
     },
-    onSuccess: () => {
-      if (!profile) return;
-      void queryClient.invalidateQueries({ queryKey: queryKeys.myListings(profile.uid) });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.userProfile(profile.uid) });
-    },
+    onSuccess: refreshSellerState,
   });
 }
 
@@ -85,6 +105,7 @@ export function useUpdateListing(listingId: string) {
 export function useSetListingStatus() {
   const queryClient = useQueryClient();
   const uid = useAuthStore((s) => s.firebaseUid);
+  const refreshSellerState = useRefreshSellerState();
 
   return useMutation({
     mutationFn: ({
@@ -99,29 +120,22 @@ export function useSetListingStatus() {
       if (!uid) throw new Error('Necesitás iniciar sesión.');
       return setListingStatus(uid, listingId, nextStatus, previousStatus);
     },
-    onSuccess: (_data, variables) => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.listing(variables.listingId) });
-      if (uid) {
-        void queryClient.invalidateQueries({ queryKey: queryKeys.myListings(uid) });
-        void queryClient.invalidateQueries({ queryKey: queryKeys.userProfile(uid) });
-      }
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.listing(variables.listingId) });
+      await refreshSellerState();
     },
   });
 }
 
 export function useDeleteListing() {
-  const queryClient = useQueryClient();
   const uid = useAuthStore((s) => s.firebaseUid);
+  const refreshSellerState = useRefreshSellerState();
 
   return useMutation({
     mutationFn: (listing: Listing) => {
       if (!uid) throw new Error('Necesitás iniciar sesión.');
       return deleteListing(uid, listing.id, listing.status === 'active');
     },
-    onSuccess: () => {
-      if (!uid) return;
-      void queryClient.invalidateQueries({ queryKey: queryKeys.myListings(uid) });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.userProfile(uid) });
-    },
+    onSuccess: refreshSellerState,
   });
 }

@@ -12,7 +12,7 @@ import { ProBadge } from '@/components/StatusBadge';
 import { SocialLinksRow } from '@/components/SocialLinksRow';
 import { Colors } from '@/constants/colors';
 import { useUserListings } from '@/features/listings/useListings';
-import { useUserProfile } from '@/features/users/useUserProfile';
+import { useUserProfile, useUserStats } from '@/features/users/useUserProfile';
 import { useAuthStore } from '@/store/authStore';
 
 export default function UserProfileScreen() {
@@ -21,6 +21,7 @@ export default function UserProfileScreen() {
   const myUid = useAuthStore((s) => s.firebaseUid);
   const { data: profile, isLoading } = useUserProfile(id);
   const { data: listings } = useUserListings(id);
+  const { data: stats } = useUserStats(id);
 
   if (isLoading || !profile) return <LoadingView />;
 
@@ -41,23 +42,23 @@ export default function UserProfileScreen() {
           {profile.city ? <Text style={styles.city}>📍 {profile.city}</Text> : null}
           {profile.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
 
-          <RatingStars value={profile.ratingAvg} count={profile.ratingCount} showValue size={18} />
+          <RatingStars value={stats?.ratingAvg ?? 0} count={stats?.ratingCount ?? 0} showValue size={18} />
 
           <View style={styles.statsRow}>
             <Link href={{ pathname: '/followers/[id]', params: { id: profile.uid } }} asChild>
-              <Pressable style={styles.stat}>
-                <Text style={styles.statNumber}>{profile.followerCount}</Text>
+              <Pressable style={styles.stat} accessibilityRole="button">
+                <Text style={styles.statNumber}>{formatCount(stats?.followers)}</Text>
                 <Text style={styles.statLabel}>Seguidores</Text>
               </Pressable>
             </Link>
             <Link href={{ pathname: '/following/[id]', params: { id: profile.uid } }} asChild>
-              <Pressable style={styles.stat}>
-                <Text style={styles.statNumber}>{profile.followingCount}</Text>
+              <Pressable style={styles.stat} accessibilityRole="button">
+                <Text style={styles.statNumber}>{formatCount(stats?.following)}</Text>
                 <Text style={styles.statLabel}>Siguiendo</Text>
               </Pressable>
             </Link>
             <View style={styles.stat}>
-              <Text style={styles.statNumber}>{profile.activeListingCount}</Text>
+              <Text style={styles.statNumber}>{formatCount(stats?.activeListings)}</Text>
               <Text style={styles.statLabel}>Publicaciones</Text>
             </View>
           </View>
@@ -97,6 +98,11 @@ export default function UserProfileScreen() {
       </ScrollView>
     </Screen>
   );
+}
+
+/** Mientras la agregación viaja mostramos un guion en vez de un cero falso. */
+function formatCount(value: number | undefined): string {
+  return value === undefined ? '—' : String(value);
 }
 
 const styles = StyleSheet.create({

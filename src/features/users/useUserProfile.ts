@@ -9,8 +9,8 @@ import {
   getFollowers,
   getFollowing,
   getUserProfile,
+  getUserStats,
   isFollowing,
-  refreshOwnAggregates,
   unfollowUser,
   type UpdateProfileInput,
   updateUserProfile,
@@ -20,6 +20,19 @@ export function useUserProfile(uid: string | undefined) {
   return useQuery({
     queryKey: queryKeys.userProfile(uid ?? 'unknown'),
     queryFn: () => getUserProfile(uid as string),
+    enabled: Boolean(uid),
+  });
+}
+
+/**
+ * Seguidores / seguidos / publicaciones / calificaciones calculados desde las
+ * colecciones de origen. Reemplaza a los contadores denormalizados, que ya no
+ * son escribibles por ningún cliente.
+ */
+export function useUserStats(uid: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.userStats(uid ?? 'unknown'),
+    queryFn: () => getUserStats(uid as string),
     enabled: Boolean(uid),
   });
 }
@@ -68,14 +81,13 @@ export function useUpdateProfile() {
 export function useFollowMutation() {
   const queryClient = useQueryClient();
   const myProfile = useAuthStore((s) => s.profile);
-  const setProfile = useAuthStore((s) => s.setProfile);
 
   return useMutation({
     mutationFn: async (target: UserProfile) => {
       if (!myProfile) throw new Error('Necesitás iniciar sesión.');
       const currentlyFollowing = await isFollowing(myProfile.uid, target.uid);
       if (currentlyFollowing) {
-        await unfollowUser(myProfile.uid, myProfile.followingCount, target.uid);
+        await unfollowUser(myProfile.uid, target.uid);
       } else {
         await followUser(myProfile, target);
       }
@@ -83,34 +95,14 @@ export function useFollowMutation() {
     },
     onSuccess: async (_nowFollowing, target) => {
       if (!myProfile) return;
-      const fresh = await getUserProfile(myProfile.uid);
-      setProfile(fresh);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.isFollowing(myProfile.uid, target.uid) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.userProfile(target.uid) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.userStats(target.uid) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.userStats(myProfile.uid) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.followers(target.uid) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.following(myProfile.uid) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.followingFeed(myProfile.uid) }),
       ]);
-    },
-  });
-}
-
-export function useRefreshOwnAggregates() {
-  const uid = useAuthStore((s) => s.firebaseUid);
-  const setProfile = useAuthStore((s) => s.setProfile);
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async () => {
-      if (!uid) return;
-      await refreshOwnAggregates(uid);
-      const fresh = await getUserProfile(uid);
-      setProfile(fresh);
-    },
-    onSuccess: () => {
-      if (!uid) return;
-      void queryClient.invalidateQueries({ queryKey: queryKeys.userProfile(uid) });
     },
   });
 }
