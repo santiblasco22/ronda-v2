@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ActivityIndicator, Pressable, StyleSheet, Text, type ViewStyle } from 'react-native';
 
 import { Colors } from '@/constants/colors';
-import { MIN_TOUCH_TARGET, Radius, Spacing, Typography } from '@/constants/theme';
+import { MIN_TOUCH_TARGET, Radius, Shadows, Spacing, Typography } from '@/constants/theme';
 
 type Variant = 'primary' | 'secondary' | 'outline' | 'danger' | 'ghost';
 
@@ -68,8 +68,8 @@ export function Button({
 
 const styles = StyleSheet.create({
   base: {
-    minHeight: MIN_TOUCH_TARGET,
-    borderRadius: Radius.lg,
+    minHeight: 52,
+    borderRadius: Radius.pill,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.xl,
     alignItems: 'center',
@@ -78,17 +78,18 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   small: {
-    minHeight: 36,
+    minHeight: MIN_TOUCH_TARGET,
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.lg,
-    borderRadius: Radius.md,
+    borderRadius: Radius.pill,
   },
   disabled: {
     opacity: 0.45,
   },
   label: {
     ...Typography.bodyStrong,
-    fontSize: 16,
+    fontSize: 15,
+    letterSpacing: 0.1,
   },
   smallLabel: {
     fontSize: 14,
@@ -96,17 +97,17 @@ const styles = StyleSheet.create({
 });
 
 const variantStyles: Record<Variant, ViewStyle> = {
-  primary: { backgroundColor: Colors.primary },
-  secondary: { backgroundColor: Colors.text },
-  outline: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: Colors.primaryInk },
+  primary: { backgroundColor: Colors.primary, borderWidth: 1.5, borderColor: Colors.text, ...Shadows.card },
+  secondary: { backgroundColor: Colors.plum },
+  outline: { backgroundColor: Colors.surface, borderWidth: 1.5, borderColor: Colors.borderStrong },
   danger: { backgroundColor: Colors.danger },
   ghost: { backgroundColor: 'transparent', paddingHorizontal: Spacing.md },
 };
 
 const pressedStyles: Record<Variant, ViewStyle> = {
-  primary: { backgroundColor: Colors.primaryPressed },
+  primary: { backgroundColor: Colors.primaryPressed, transform: [{ translateY: 1 }] },
   secondary: { opacity: 0.85 },
-  outline: { backgroundColor: Colors.primarySoft },
+  outline: { backgroundColor: Colors.primarySoft, borderColor: Colors.primaryInk },
   danger: { opacity: 0.85 },
   ghost: { backgroundColor: Colors.primarySoft },
 };

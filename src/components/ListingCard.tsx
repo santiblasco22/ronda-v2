@@ -11,7 +11,17 @@ import { Avatar } from './Avatar';
 import { ListingPhoto } from './ListingPhoto';
 import { ProBadge, StatusBadge } from './StatusBadge';
 
-export function ListingCard({ listing, showStatus }: { listing: Listing; showStatus?: boolean }) {
+export function ListingCard({
+  listing,
+  showStatus,
+  variant = 'grid',
+  linkToEdit = false,
+}: {
+  listing: Listing;
+  showStatus?: boolean;
+  variant?: 'grid' | 'feed';
+  linkToEdit?: boolean;
+}) {
   const accessibilityLabel = [
     listing.title,
     formatPrice(listing.price),
@@ -20,13 +30,20 @@ export function ListingCard({ listing, showStatus }: { listing: Listing; showSta
   ].join(', ');
 
   return (
-    <Link href={{ pathname: '/listing/[id]', params: { id: listing.id } }} asChild>
+    <Link
+      href={
+        linkToEdit
+          ? { pathname: '/listing/edit/[id]', params: { id: listing.id } }
+          : { pathname: '/listing/[id]', params: { id: listing.id } }
+      }
+      asChild
+    >
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={accessibilityLabel}
-        style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+        accessibilityLabel={`${linkToEdit ? 'Editar, ' : ''}${accessibilityLabel}`}
+        style={({ pressed }) => [styles.card, variant === 'feed' && styles.feedCard, pressed && styles.cardPressed]}
       >
-        <ListingPhoto uri={listing.photos[0]} style={styles.image} />
+        <ListingPhoto uri={listing.photos[0]} style={[styles.image, variant === 'feed' && styles.feedImage]} />
         {showStatus && listing.status !== 'active' ? (
           <View style={styles.statusOverlay}>
             <StatusBadge status={listing.status} />
@@ -38,7 +55,7 @@ export function ListingCard({ listing, showStatus }: { listing: Listing; showSta
             <Text style={styles.likeCount}>{listing.likeCount}</Text>
           </View>
         ) : null}
-        <View style={styles.body}>
+        <View style={[styles.body, variant === 'feed' && styles.feedBody]}>
           <Text style={styles.title} numberOfLines={1}>
             {listing.title}
           </Text>
@@ -61,9 +78,9 @@ export function ListingCard({ listing, showStatus }: { listing: Listing; showSta
 
 const styles = StyleSheet.create({
   card: {
-    flex: 1,
+    width: '47.5%',
     backgroundColor: Colors.surface,
-    borderRadius: Radius.lg,
+    borderRadius: Radius.xl,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: Colors.border,
@@ -75,8 +92,11 @@ const styles = StyleSheet.create({
   },
   image: {
     width: '100%',
-    aspectRatio: 1,
+    aspectRatio: 0.84,
   },
+  feedCard: { width: '100%' },
+  feedImage: { aspectRatio: 1.05 },
+  feedBody: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.xl },
   statusOverlay: {
     position: 'absolute',
     top: Spacing.sm,
@@ -101,18 +121,19 @@ const styles = StyleSheet.create({
   },
   body: {
     padding: Spacing.md,
-    gap: 3,
+    paddingBottom: Spacing.lg,
+    gap: 4,
   },
   title: {
     ...Typography.bodyStrong,
-    fontSize: 14,
-    lineHeight: 19,
+    fontSize: 15,
+    lineHeight: 20,
   },
   price: {
     ...Typography.heading,
     fontSize: 16,
     lineHeight: 21,
-    color: Colors.primaryInk,
+    color: Colors.plum,
   },
   meta: {
     ...Typography.micro,
@@ -122,7 +143,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs + 2,
-    marginTop: Spacing.xs,
+    marginTop: Spacing.sm,
   },
   sellerName: {
     ...Typography.micro,

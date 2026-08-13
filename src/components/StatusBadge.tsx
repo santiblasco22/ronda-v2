@@ -40,7 +40,7 @@ export function ProBadge() {
 
 const styles = StyleSheet.create({
   badge: {
-    borderRadius: Radius.sm,
+    borderRadius: Radius.pill,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 3,
     alignSelf: 'flex-start',
@@ -50,8 +50,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   proBadge: {
-    backgroundColor: Colors.gold,
-    borderRadius: Radius.sm - 2,
+    backgroundColor: Colors.butter,
+    borderRadius: Radius.pill,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },

@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Tabs } from 'expo-router';
+import type { ColorValue } from 'react-native';
 
 import { Colors } from '@/constants/colors';
-import { Typography } from '@/constants/theme';
+import { Radius, Typography } from '@/constants/theme';
 import { useNotifications } from '@/features/notifications/useNotifications';
 import { useAuthStore } from '@/store/authStore';
 
@@ -28,12 +29,14 @@ export default function TabsLayout() {
         tabBarStyle: {
           backgroundColor: Colors.surface,
           borderTopColor: Colors.border,
-          paddingTop: 4,
+          height: 72,
+          paddingTop: 7,
+          paddingBottom: 8,
         },
         tabBarLabelStyle: { fontSize: 11, fontWeight: Typography.micro.fontWeight },
         tabBarBadgeStyle: {
-          backgroundColor: Colors.primary,
-          color: Colors.textOnPrimary,
+          backgroundColor: Colors.plum,
+          color: Colors.textOnDark,
           fontSize: 11,
           fontWeight: '800',
         },
@@ -43,21 +46,27 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: 'Descubrir',
-          tabBarIcon: ({ color, size }) => <Ionicons name="shuffle" size={size} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name="sparkles" color={color} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="feed"
         options={{
           title: 'Siguiendo',
-          tabBarIcon: ({ color, size }) => <Ionicons name="people" size={size} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name="people" color={color} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="search"
         options={{
           title: 'Buscar',
-          tabBarIcon: ({ color, size }) => <Ionicons name="search" size={size} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name="search" color={color} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -65,16 +74,49 @@ export default function TabsLayout() {
         options={{
           title: 'Avisos',
           tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
-          tabBarIcon: ({ color, size }) => <Ionicons name="notifications" size={size} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name="notifications" color={color} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Perfil',
-          tabBarIcon: ({ color, size }) => <Ionicons name="person-circle" size={size} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name="person" color={color} focused={focused} />
+          ),
         }}
       />
     </Tabs>
+  );
+}
+
+function TabIcon({
+  name,
+  color,
+  focused,
+}: {
+  name: keyof typeof Ionicons.glyphMap;
+  color: ColorValue;
+  focused: boolean;
+}) {
+  return (
+    <Ionicons
+      name={name}
+      size={21}
+      color={focused ? Colors.textOnDark : color}
+      style={
+        focused
+          ? {
+              backgroundColor: Colors.plum,
+              borderRadius: Radius.pill,
+              paddingHorizontal: 13,
+              paddingVertical: 5,
+              overflow: 'hidden',
+            }
+          : undefined
+      }
+    />
   );
 }

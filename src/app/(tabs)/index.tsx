@@ -1,13 +1,14 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
 import { EmptyState, LoadingView } from '@/components/EmptyState';
+import { InlineNotice } from '@/components/FormSection';
 import { Screen } from '@/components/Screen';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { SwipeDeck } from '@/components/SwipeDeck';
 import { Colors } from '@/constants/colors';
-import { Radius, Spacing, Typography } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { useDiscoveryQueue, useRecordInteraction } from '@/features/discovery/useDiscovery';
 import type { Listing } from '@/types/models';
 
@@ -43,12 +44,11 @@ export default function DiscoverScreen() {
 
   return (
     <Screen padded={false}>
-      <ScreenHeader title="Descubrir" subtitle="Deslizá para guardar lo que te gusta" />
+      <ScreenHeader title="Descubrí" subtitle="Prendas únicas, una por una, sin apuro" />
       {recordInteraction.isError ? (
-        <Text style={styles.errorBanner}>
-          No pudimos guardar tu último swipe. La prenda volvió al mazo: revisá tu conexión y volvé
-          a intentar.
-        </Text>
+        <View style={styles.errorBanner}>
+          <InlineNotice message="No pudimos guardar tu último swipe. La prenda volvió al mazo para que puedas intentar de nuevo." />
+        </View>
       ) : null}
       <ScrollView
         style={styles.deckArea}
@@ -111,12 +111,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   errorBanner: {
-    ...Typography.caption,
-    color: Colors.dangerInk,
-    backgroundColor: Colors.dangerSoft,
     marginHorizontal: Spacing.lg,
     marginBottom: Spacing.sm,
-    padding: Spacing.md,
-    borderRadius: Radius.md,
   },
 });

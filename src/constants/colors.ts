@@ -1,55 +1,57 @@
 /**
- * Paleta de Ronda: cálida, tipo "feria americana".
+ * Paleta de Ronda.
  *
- * Los tonos están elegidos para que el texto llegue a contraste AA (4.5:1)
- * sobre el fondo donde se usa:
- *
- * - `primary` es un naranja claro: lleva tinta oscura encima (`textOnPrimary`,
- *   6.7:1), no blanco (que daba 2.3:1).
- * - `primaryInk`, `dangerInk` y `successInk` son las versiones oscuras para
- *   texto e iconos sobre fondos claros (4.7:1, 5.3:1 y 5:1).
- * - `danger` y `success` son los rellenos, pensados con texto blanco encima
- *   (5.4:1 y 5.6:1).
+ * La base recuerda papel, etiquetas y prendas guardadas; el coral funciona
+ * como hilo conductor y el ciruela como tinta. Los pares de texto/fondo se
+ * mantienen por encima de AA y nunca usamos blanco sobre el coral claro.
  */
 export const Colors = {
-  background: '#F6F1E7',
-  surface: '#FFFFFF',
-  /** Fondo de placeholders, skeletons y fotos que no cargaron. */
-  surfaceMuted: '#F0E9DA',
-  border: '#E4D9C3',
-  borderStrong: '#D5C6AA',
+  background: '#F7F0E7',
+  backgroundDeep: '#EFE2D4',
+  surface: '#FFFCF8',
+  surfaceRaised: '#FFFFFF',
+  surfaceMuted: '#EEE3D7',
+  surfaceTint: '#F4E8DD',
+  border: '#DDCDBE',
+  borderStrong: '#CBB5A4',
 
-  text: '#2A2119',
-  textMuted: '#6B6053',
-  textOnPrimary: '#2A2119',
-  textOnDark: '#FFFFFF',
+  text: '#2D1D2C',
+  textMuted: '#71616D',
+  textSubtle: '#8B7984',
+  textOnPrimary: '#2D1D2C',
+  textOnDark: '#FFF9F4',
 
-  primary: '#F6902A',
-  primaryPressed: '#E07F1C',
-  primarySoft: '#FCE3C2',
-  primaryInk: '#A85410',
+  primary: '#F1795F',
+  primaryPressed: '#DE614A',
+  primarySoft: '#FADFD7',
+  primaryInk: '#9E392B',
 
-  success: '#2F7358',
-  successInk: '#2F7358',
-  successSoft: '#DCEFE4',
+  plum: '#59354F',
+  plumSoft: '#EADDE7',
+  butter: '#F3C76B',
+  butterSoft: '#FAEDC9',
 
-  danger: '#C0392B',
-  dangerInk: '#B23A2E',
-  dangerSoft: '#F7E1DE',
+  success: '#327966',
+  successInk: '#286454',
+  successSoft: '#DCEDE6',
 
-  gold: '#E0A526',
+  danger: '#B64250',
+  dangerInk: '#963440',
+  dangerSoft: '#F6DFE2',
+
+  gold: '#C58A13',
 
   white: '#FFFFFF',
   black: '#000000',
-  overlay: 'rgba(42, 33, 25, 0.55)',
-  overlayStrong: 'rgba(42, 33, 25, 0.78)',
+  overlay: 'rgba(45, 29, 44, 0.48)',
+  overlayStrong: 'rgba(45, 29, 44, 0.82)',
 
-  like: '#2F7358',
-  pass: '#C0392B',
+  like: '#287260',
+  pass: '#A23E4A',
 
-  instagram: '#C1358B',
-  whatsapp: '#25D366',
-  facebook: '#1877F2',
+  instagram: '#B63A82',
+  whatsapp: '#218F5A',
+  facebook: '#2864A9',
 } as const;
 
 export type ColorName = keyof typeof Colors;

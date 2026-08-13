@@ -59,7 +59,22 @@ export function SwipeDeck({
 
   return (
     <View style={styles.container}>
+      <View style={styles.deckStatus}>
+        <View style={styles.liveDot} />
+        <Text style={styles.deckStatusText}>EN TU RONDA</Text>
+        <Text style={styles.deckCount}>{remaining}</Text>
+      </View>
       <View style={styles.stack}>
+        {!current ? (
+          <View style={styles.deckComplete}>
+            <View style={styles.completeIcon}>
+              <Ionicons name="checkmark" size={30} color={Colors.successInk} />
+            </View>
+            <Text style={styles.completeEyebrow}>RONDA COMPLETA</Text>
+            <Text style={styles.completeTitle}>Viste todas las prendas.</Text>
+            <Text style={styles.completeBody}>Deslizá hacia abajo para buscar una tanda nueva.</Text>
+          </View>
+        ) : null}
         {visible
           .map((listing, i) => ({ listing, i }))
           .reverse()
@@ -80,23 +95,27 @@ export function SwipeDeck({
       </View>
 
       <View style={styles.footer}>
-        <View style={styles.actions}>
-          <DeckButton
-            icon="close"
-            label="Pasar esta prenda"
-            color={Colors.pass}
-            disabled={actionsDisabled}
-            onPress={() => topCardRef.current?.swipeLeft()}
-          />
-          <DeckButton
-            icon="heart"
-            label="Me gusta esta prenda"
-            color={Colors.white}
-            background={Colors.like}
-            disabled={actionsDisabled}
-            onPress={() => topCardRef.current?.swipeRight()}
-          />
-        </View>
+        {current ? (
+          <View style={styles.actions}>
+            <DeckButton
+              icon="close"
+              text="Pasar"
+              label="Pasar esta prenda"
+              color={Colors.pass}
+              disabled={actionsDisabled}
+              onPress={() => topCardRef.current?.swipeLeft()}
+            />
+            <DeckButton
+              icon="heart"
+              text="Guardar"
+              label="Me gusta esta prenda"
+              color={Colors.white}
+              background={Colors.like}
+              disabled={actionsDisabled}
+              onPress={() => topCardRef.current?.swipeRight()}
+            />
+          </View>
+        ) : null}
         <Text style={styles.hint}>
           {remaining > 0
             ? `Deslizá o usá los botones · quedan ${remaining} ${remaining === 1 ? 'prenda' : 'prendas'}`
@@ -109,6 +128,7 @@ export function SwipeDeck({
 
 function DeckButton({
   icon,
+  text,
   label,
   color,
   background,
@@ -116,6 +136,7 @@ function DeckButton({
   onPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
+  text: string;
   label: string;
   color: string;
   background?: string;
@@ -137,7 +158,10 @@ function DeckButton({
         disabled && styles.actionButtonDisabled,
       ]}
     >
-      <Ionicons name={icon} size={28} color={color} />
+      <View style={styles.actionIcon}>
+        <Ionicons name={icon} size={25} color={color} />
+      </View>
+      <Text style={[styles.actionLabel, { color }]}>{text}</Text>
     </Pressable>
   );
 }
@@ -190,11 +214,62 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
   },
+  deckStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.primary,
+  },
+  deckStatusText: {
+    ...Typography.micro,
+    color: Colors.plum,
+  },
+  deckCount: {
+    ...Typography.micro,
+    color: Colors.primaryInk,
+    backgroundColor: Colors.primarySoft,
+    borderRadius: Radius.pill,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    overflow: 'hidden',
+  },
   stack: {
     flex: 1,
     width: '100%',
     marginBottom: Spacing.lg,
   },
+  deckComplete: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    borderRadius: Radius.xxl,
+    borderWidth: 1,
+    borderColor: Colors.borderStrong,
+    borderStyle: 'dashed',
+    backgroundColor: Colors.surface,
+    padding: Spacing.xl,
+  },
+  completeIcon: {
+    width: 62,
+    height: 62,
+    borderRadius: Radius.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.successSoft,
+    marginBottom: Spacing.sm,
+  },
+  completeEyebrow: { ...Typography.micro, color: Colors.successInk },
+  completeTitle: { ...Typography.heading, textAlign: 'center' },
+  completeBody: { ...Typography.caption, textAlign: 'center' },
   face: {
     flex: 1,
     borderRadius: Radius.xxl,
@@ -276,21 +351,31 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: 'row',
-    gap: Spacing.xxl,
+    gap: Spacing.md,
   },
   actionButton: {
-    width: 64,
-    height: 64,
-    minWidth: MIN_TOUCH_TARGET,
+    minWidth: 116,
+    height: 58,
     minHeight: MIN_TOUCH_TARGET,
-    borderRadius: Radius.pill,
+    borderRadius: Radius.xl,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
     ...Shadows.floating,
   },
   actionButtonOutlined: {
     backgroundColor: Colors.surface,
     borderWidth: 2,
+  },
+  actionIcon: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionLabel: {
+    ...Typography.label,
+    fontSize: 14,
   },
   actionButtonPressed: {
     transform: [{ scale: 0.94 }],

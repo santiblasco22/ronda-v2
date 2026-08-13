@@ -44,7 +44,7 @@ export default function SearchScreen() {
     [filters.query, filters.category, filters.size, filters.condition, filters.city, filters.maxPrice]
   );
 
-  const { data: results, isLoading } = useSearchListings(activeFilters);
+  const { data: results, isLoading, isError, refetch } = useSearchListings(activeFilters);
 
   const activeFilterCount = [
     filters.category,
@@ -58,13 +58,13 @@ export default function SearchScreen() {
 
   return (
     <Screen padded={false}>
-      <ScreenHeader title="Buscar" />
+      <ScreenHeader title="Encontrá" subtitle="Filtrá la ronda a tu manera" />
 
       <View style={styles.searchRow}>
         <View style={styles.searchInputWrapper}>
           <Ionicons name="search" size={18} color={Colors.textMuted} />
           <TextInput
-            placeholder="Buscar prendas, marcas…"
+            placeholder="Prenda, color o categoría…"
             placeholderTextColor={Colors.textMuted}
             value={filters.query}
             onChangeText={filters.setQuery}
@@ -117,7 +117,16 @@ export default function SearchScreen() {
       ) : null}
 
       {isLoading ? (
-        <LoadingView />
+        <LoadingView label="Revisando percheros…" />
+      ) : isError ? (
+        <EmptyState
+          icon="cloud-offline-outline"
+          tone="danger"
+          title="No pudimos hacer la búsqueda"
+          subtitle="Revisá tu conexión. Tus filtros siguen tal como los dejaste."
+          actionLabel="Volver a intentar"
+          onAction={() => refetch()}
+        />
       ) : (
         <FlatList
           data={results ?? []}
@@ -126,21 +135,31 @@ export default function SearchScreen() {
           contentContainerStyle={styles.list}
           columnWrapperStyle={styles.column}
           keyboardShouldPersistTaps="handled"
+          ListHeaderComponent={
+            results?.length ? (
+              <View style={styles.resultsHeader}>
+                <Text style={styles.resultsEyebrow}>SELECCIÓN PARA VOS</Text>
+                <Text style={styles.resultsCount}>
+                  {results.length} {results.length === 1 ? 'hallazgo' : 'hallazgos'}
+                </Text>
+              </View>
+            ) : null
+          }
           renderItem={({ item }: { item: Listing }) => <ListingCard listing={item} />}
           ListEmptyComponent={
             hasAnyCriteria ? (
               <EmptyState
                 icon="search-outline"
-                title="No encontramos prendas con esos filtros"
-                subtitle="Probá con menos filtros, otra ciudad o un precio máximo más alto."
+                title="Esa combinación no apareció"
+                subtitle="Probá sacando un filtro, cambiando la ciudad o ampliando el precio."
                 actionLabel="Limpiar filtros"
                 onAction={filters.reset}
               />
             ) : (
               <EmptyState
                 icon="pricetags-outline"
-                title="Todavía no hay prendas publicadas"
-                subtitle="Cuando la comunidad empiece a publicar, vas a poder filtrar por categoría, talle, estado, ciudad y precio."
+                title="El perchero espera su primera prenda"
+                subtitle="Cuando la comunidad publique, acá vas a poder explorar por talle, estado, ciudad y precio."
               />
             )
           }
@@ -158,7 +177,8 @@ function FiltersModal({ visible, onClose }: { visible: boolean; onClose: () => v
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <Screen>
+      <Screen bottomSafe>
+        <View style={styles.sheetHandle} />
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle} accessibilityRole="header">
             Filtros
@@ -264,25 +284,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.sm,
     backgroundColor: Colors.surface,
-    borderRadius: Radius.md,
+    borderRadius: Radius.pill,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    minHeight: 52,
   },
   searchInput: {
     flex: 1,
-    minHeight: MIN_TOUCH_TARGET,
+    minHeight: 50,
     paddingVertical: Spacing.sm,
     fontSize: 15,
     color: Colors.text,
   },
   filterButton: {
-    width: MIN_TOUCH_TARGET,
-    height: MIN_TOUCH_TARGET,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    width: 52,
+    height: 52,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.primarySoft,
+    borderWidth: 1.5,
+    borderColor: Colors.primaryInk,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -326,6 +347,14 @@ const styles = StyleSheet.create({
     gap: Spacing.lg,
     flexGrow: 1,
   },
+  resultsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: Spacing.xs,
+  },
+  resultsEyebrow: { ...Typography.micro, color: Colors.primaryInk },
+  resultsCount: { ...Typography.caption, fontWeight: '700' },
   column: {
     gap: Spacing.lg,
   },
@@ -335,12 +364,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: Spacing.lg,
   },
+  sheetHandle: {
+    width: 42,
+    height: 5,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.borderStrong,
+    alignSelf: 'center',
+    marginTop: Spacing.sm,
+  },
   modalTitle: {
     ...Typography.title,
   },
   sectionLabel: {
     ...Typography.sectionTitle,
-    marginTop: Spacing.xl,
+    marginTop: Spacing.xxl,
     marginBottom: Spacing.md,
   },
   chipsRow: {
@@ -351,7 +388,7 @@ const styles = StyleSheet.create({
   textInput: {
     minHeight: MIN_TOUCH_TARGET,
     backgroundColor: Colors.surface,
-    borderRadius: Radius.md,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     paddingHorizontal: Spacing.lg,
