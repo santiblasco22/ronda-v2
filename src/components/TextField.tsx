@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { StyleSheet, Text, TextInput, type TextInputProps, View } from 'react-native';
 
 import { Colors } from '@/constants/colors';
-import { MIN_TOUCH_TARGET, Radius, Spacing, Typography } from '@/constants/theme';
+import { Radius, Spacing, Typography } from '@/constants/theme';
 
 interface TextFieldProps extends TextInputProps {
   label?: string;
@@ -83,19 +83,20 @@ const styles = StyleSheet.create({
     ...Typography.micro,
   },
   input: {
-    minHeight: MIN_TOUCH_TARGET,
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.md,
+    minHeight: 50,
+    backgroundColor: Colors.surfaceTint,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    paddingVertical: Spacing.md + 1,
     fontSize: 15,
     color: Colors.text,
   },
   inputFocused: {
-    borderColor: Colors.primary,
+    borderColor: Colors.primaryInk,
     borderWidth: 1.5,
+    backgroundColor: Colors.surface,
   },
   inputError: {
     borderColor: Colors.dangerInk,

@@ -39,14 +39,18 @@ export function Avatar({
 const styles = StyleSheet.create({
   image: {
     backgroundColor: Colors.surfaceMuted,
+    borderWidth: 2,
+    borderColor: Colors.surface,
   },
   fallback: {
-    backgroundColor: Colors.primarySoft,
+    backgroundColor: Colors.butterSoft,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: Colors.surface,
   },
   initials: {
-    color: Colors.primaryInk,
-    fontWeight: '700',
+    color: Colors.plum,
+    fontWeight: '900',
   },
 });

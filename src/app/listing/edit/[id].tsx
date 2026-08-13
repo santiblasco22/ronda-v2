@@ -1,11 +1,14 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/Button';
 import { Chip } from '@/components/Chip';
-import { LoadingView } from '@/components/EmptyState';
+import { EmptyState, LoadingView } from '@/components/EmptyState';
+import { FormSection, InlineNotice } from '@/components/FormSection';
 import { PhotoPicker, type PickedPhoto } from '@/components/PhotoPicker';
+import { Screen } from '@/components/Screen';
 import { TextField } from '@/components/TextField';
 import { Colors } from '@/constants/colors';
 import { MAX_LISTING_DESCRIPTION_LENGTH, MAX_LISTING_TITLE_LENGTH } from '@/constants/limits';
@@ -26,20 +29,31 @@ import { isPermissionDenied } from '@/utils/errors';
 import { validatePrice } from '@/utils/validators';
 
 const STATUS_OPTIONS: { value: ListingStatus; label: string }[] = [
-  { value: 'active', label: 'Activo' },
-  { value: 'sold', label: 'Vendido' },
-  { value: 'archived', label: 'Archivado' },
+  { value: 'active', label: 'En vidriera' },
+  { value: 'sold', label: 'Vendida' },
+  { value: 'archived', label: 'Archivada' },
 ];
 
 export default function EditListingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { data: listing, isLoading } = useListing(id);
+  const router = useRouter();
+  const { data: listing, isLoading, isError, refetch } = useListing(id);
 
-  if (isLoading || !listing) return <LoadingView />;
-
-  // La key fuerza a remontar el formulario si cambia la publicación,
-  // permitiendo inicializar el estado local directamente desde los props
-  // sin necesidad de sincronizarlo con un efecto.
+  if (isLoading) return <LoadingView label="Abriendo la publicación…" />;
+  if (isError) {
+    return (
+      <Screen>
+        <EmptyState icon="cloud-offline-outline" tone="danger" title="No pudimos abrir esta publicación" subtitle="Revisá tu conexión y volvé a intentar." actionLabel="Reintentar" onAction={() => refetch()} />
+      </Screen>
+    );
+  }
+  if (!listing) {
+    return (
+      <Screen>
+        <EmptyState icon="shirt-outline" title="Esta publicación ya no existe" actionLabel="Volver" onAction={() => router.back()} />
+      </Screen>
+    );
+  }
   return <EditListingForm key={listing.id} listing={listing} />;
 }
 
@@ -48,7 +62,6 @@ function EditListingForm({ listing }: { listing: Listing }) {
   const updateListing = useUpdateListing(listing.id);
   const setStatus = useSetListingStatus();
   const deleteListing = useDeleteListing();
-
   const [title, setTitle] = useState(listing.title);
   const [description, setDescription] = useState(listing.description);
   const [price, setPrice] = useState(String(listing.price));
@@ -57,17 +70,15 @@ function EditListingForm({ listing }: { listing: Listing }) {
   const [condition, setCondition] = useState<ListingCondition | null>(listing.condition);
   const [color, setColor] = useState(listing.color);
   const [city, setCity] = useState(listing.city);
-  const [photos, setPhotos] = useState<PickedPhoto[]>(
-    listing.photos.map((url) => ({ uri: url, isLocal: false }))
-  );
+  const [photos, setPhotos] = useState<PickedPhoto[]>(listing.photos.map((url) => ({ uri: url, isLocal: false })));
   const [error, setError] = useState<string | null>(null);
 
   async function handleSave() {
     setError(null);
+    if (!title.trim()) return setError('Ingresá un título.');
     const priceError = validatePrice(price);
     if (priceError) return setError(priceError);
     if (!category || !size || !condition) return setError('Completá categoría, talle y estado.');
-
     try {
       await updateListing.mutateAsync({
         title,
@@ -78,14 +89,12 @@ function EditListingForm({ listing }: { listing: Listing }) {
         condition,
         color,
         city,
-        keepPhotos: photos.filter((p) => !p.isLocal).map((p) => p.uri),
-        addLocalPhotoUris: photos.filter((p) => p.isLocal).map((p) => p.uri),
+        keepPhotos: photos.filter((photo) => !photo.isLocal).map((photo) => photo.uri),
+        addLocalPhotoUris: photos.filter((photo) => photo.isLocal).map((photo) => photo.uri),
       });
       router.back();
     } catch (err) {
-      setError(
-        err instanceof PhotoUploadError ? err.message : 'No pudimos guardar los cambios.'
-      );
+      setError(err instanceof PhotoUploadError ? err.message : 'No pudimos guardar los cambios.');
     }
   }
 
@@ -94,13 +103,7 @@ function EditListingForm({ listing }: { listing: Listing }) {
     setStatus.mutate(
       { listingId: listing.id, nextStatus: next, previousStatus: listing.status },
       {
-        onError: (err) => {
-          setError(
-            isPermissionDenied(err)
-              ? 'No podés reactivar esta publicación: llegaste al límite de publicaciones activas de tu plan.'
-              : 'No pudimos cambiar el estado de la publicación.'
-          );
-        },
+        onError: (err) => setError(isPermissionDenied(err) ? 'No podés reactivar esta publicación: tu vidriera ya está completa.' : 'No pudimos cambiar el estado de la publicación.'),
       }
     );
   }
@@ -108,123 +111,86 @@ function EditListingForm({ listing }: { listing: Listing }) {
   function handleDelete() {
     Alert.alert('Eliminar publicación', '¿Seguro que querés eliminarla? No se puede deshacer.', [
       { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Eliminar',
-        style: 'destructive',
-        onPress: async () => {
-          await deleteListing.mutateAsync(listing);
-          router.back();
-        },
-      },
+      { text: 'Eliminar', style: 'destructive', onPress: async () => { await deleteListing.mutateAsync(listing); router.back(); } },
     ]);
   }
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Editar publicación</Text>
-
-        <Text style={styles.label}>Estado de la publicación</Text>
-        <View style={styles.chipsRow}>
-          {STATUS_OPTIONS.map((option) => (
-            <Chip
-              key={option.value}
-              label={option.label}
-              selected={listing.status === option.value}
-              onPress={() => handleStatusChange(option.value)}
-            />
-          ))}
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <View style={styles.intro}>
+          <Text style={styles.eyebrow}>GESTIONAR PRENDA</Text>
+          <Text style={styles.title}>Dale una vuelta a tu publicación.</Text>
+          <Text style={styles.subtitle}>Actualizá los detalles o cambiá su lugar en la vidriera.</Text>
         </View>
 
-        <Text style={styles.label}>Fotos</Text>
-        <PhotoPicker photos={photos} onChange={setPhotos} />
+        <FormSection icon="eye-outline" title="Visibilidad" caption="Solo las prendas en vidriera aparecen en Descubrir y Buscar">
+          <View style={styles.chipsRow}>
+            {STATUS_OPTIONS.map((option) => <Chip key={option.value} label={option.label} selected={listing.status === option.value} onPress={() => handleStatusChange(option.value)} />)}
+          </View>
+          {setStatus.isPending ? <Text style={styles.savingStatus}>Actualizando estado…</Text> : null}
+        </FormSection>
 
-        <TextField label="Título" value={title} onChangeText={setTitle} maxLength={MAX_LISTING_TITLE_LENGTH} />
-        <TextField
-          label="Descripción"
-          value={description}
-          onChangeText={setDescription}
-          maxLength={MAX_LISTING_DESCRIPTION_LENGTH}
-          multiline
-          numberOfLines={4}
-          style={styles.textarea}
-        />
-        <TextField label="Precio" keyboardType="numeric" value={price} onChangeText={setPrice} />
+        <FormSection icon="camera-outline" title="Fotos" caption="Opcionales · la primera funciona como portada">
+          <PhotoPicker photos={photos} onChange={setPhotos} />
+        </FormSection>
 
-        <Text style={styles.label}>Categoría</Text>
-        <View style={styles.chipsRow}>
-          {LISTING_CATEGORIES.map((item) => (
-            <Chip key={item} label={item} selected={category === item} onPress={() => setCategory(item)} />
-          ))}
+        <FormSection icon="pricetag-outline" title="Lo esencial">
+          <TextField label="Título" value={title} onChangeText={setTitle} maxLength={MAX_LISTING_TITLE_LENGTH} showCounter />
+          <TextField label="Precio en pesos" keyboardType="numeric" value={price} onChangeText={setPrice} />
+          <TextField label="Descripción (opcional)" value={description} onChangeText={setDescription} maxLength={MAX_LISTING_DESCRIPTION_LENGTH} showCounter multiline numberOfLines={4} style={styles.textarea} />
+        </FormSection>
+
+        <FormSection icon="options-outline" title="Cómo es">
+          <ChoiceGroup label="Categoría">{LISTING_CATEGORIES.map((item) => <Chip key={item} label={item} selected={category === item} onPress={() => setCategory(item)} />)}</ChoiceGroup>
+          <ChoiceGroup label="Talle">{LISTING_SIZES.map((item) => <Chip key={item} label={item} selected={size === item} onPress={() => setSize(item)} />)}</ChoiceGroup>
+          <ChoiceGroup label="Estado de la prenda">{LISTING_CONDITIONS.map((item) => <Chip key={item} label={item} selected={condition === item} onPress={() => setCondition(item)} />)}</ChoiceGroup>
+        </FormSection>
+
+        <FormSection icon="location-outline" title="Detalles">
+          <TextField label="Color" value={color} onChangeText={setColor} />
+          <TextField label="Ciudad" value={city} onChangeText={setCity} />
+        </FormSection>
+
+        {error ? <InlineNotice message={error} /> : null}
+        <Button label="Guardar cambios" icon="checkmark" onPress={handleSave} loading={updateListing.isPending} style={styles.saveButton} />
+
+        <View style={styles.dangerZone}>
+          <View style={styles.dangerTitleRow}>
+            <Ionicons name="trash-outline" size={18} color={Colors.dangerInk} />
+            <Text style={styles.dangerTitle}>Eliminar definitivamente</Text>
+          </View>
+          <Text style={styles.dangerBody}>Esta acción borra la publicación y no se puede revertir.</Text>
+          <Button label="Eliminar publicación" variant="danger" onPress={handleDelete} loading={deleteListing.isPending} small />
         </View>
-
-        <Text style={styles.label}>Talle</Text>
-        <View style={styles.chipsRow}>
-          {LISTING_SIZES.map((item) => (
-            <Chip key={item} label={item} selected={size === item} onPress={() => setSize(item)} />
-          ))}
-        </View>
-
-        <Text style={styles.label}>Estado de la prenda</Text>
-        <View style={styles.chipsRow}>
-          {LISTING_CONDITIONS.map((item) => (
-            <Chip key={item} label={item} selected={condition === item} onPress={() => setCondition(item)} />
-          ))}
-        </View>
-
-        <TextField label="Color" value={color} onChangeText={setColor} />
-        <TextField label="Ciudad" value={city} onChangeText={setCity} />
-
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-
-        <Button label="Guardar cambios" onPress={handleSave} loading={updateListing.isPending} style={styles.saveButton} />
-        <Button
-          label="Eliminar publicación"
-          variant="danger"
-          onPress={handleDelete}
-          loading={deleteListing.isPending}
-          style={styles.saveButton}
-        />
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
+function ChoiceGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return <View style={styles.choiceGroup}><Text style={styles.choiceLabel}>{label}</Text><View style={styles.chipsRow}>{children}</View></View>;
+}
+
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: Colors.background },
-  container: {
-    padding: Spacing.xl,
-    paddingBottom: Spacing.xxxl + Spacing.xl,
+  container: { padding: Spacing.lg, paddingBottom: Spacing.jumbo, gap: Spacing.lg },
+  intro: { paddingHorizontal: Spacing.xs, marginBottom: Spacing.xs },
+  eyebrow: {
+    ...Typography.micro,
+    color: Colors.primaryInk,
+    textTransform: 'uppercase',
   },
-  title: {
-    ...Typography.title,
-    marginBottom: Spacing.lg,
-  },
-  label: {
-    ...Typography.label,
-    marginBottom: Spacing.md,
-    marginTop: Spacing.lg,
-  },
-  chipsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-    marginBottom: Spacing.sm,
-  },
-  textarea: {
-    height: 108,
-    textAlignVertical: 'top',
-    paddingTop: Spacing.md,
-  },
-  error: {
-    ...Typography.caption,
-    color: Colors.dangerInk,
-    backgroundColor: Colors.dangerSoft,
-    padding: Spacing.md,
-    borderRadius: Radius.md,
-    marginTop: Spacing.lg,
-  },
-  saveButton: {
-    marginTop: Spacing.lg,
-  },
+  title: { ...Typography.title, marginTop: Spacing.xs },
+  subtitle: { ...Typography.body, color: Colors.textMuted, marginTop: Spacing.sm },
+  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  choiceGroup: { gap: Spacing.sm },
+  choiceLabel: { ...Typography.label },
+  savingStatus: { ...Typography.caption, color: Colors.primaryInk },
+  textarea: { height: 112, textAlignVertical: 'top', paddingTop: Spacing.md },
+  saveButton: { marginTop: Spacing.sm },
+  dangerZone: { borderWidth: 1, borderColor: Colors.dangerInk, borderRadius: Radius.xl, padding: Spacing.lg, gap: Spacing.md, backgroundColor: Colors.dangerSoft },
+  dangerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  dangerTitle: { ...Typography.sectionTitle, color: Colors.dangerInk },
+  dangerBody: { ...Typography.caption, color: Colors.dangerInk },
 });

@@ -1,7 +1,10 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
+import { AuthScaffold } from '@/components/AuthScaffold';
 import { Button } from '@/components/Button';
+import { InlineNotice } from '@/components/FormSection';
 import { TextField } from '@/components/TextField';
 import { Colors } from '@/constants/colors';
 import { MAX_USERNAME_LENGTH } from '@/constants/limits';
@@ -16,7 +19,6 @@ export default function OnboardingScreen() {
   const firebaseUid = useAuthStore((s) => s.firebaseUid);
   const email = useAuthStore((s) => s.email);
   const setProfile = useAuthStore((s) => s.setProfile);
-
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [city, setCity] = useState('');
@@ -26,42 +28,22 @@ export default function OnboardingScreen() {
   async function handleContinue() {
     setError(null);
     if (!firebaseUid) return;
-
     const usernameError = validateUsername(username);
-    if (usernameError) {
-      setError(usernameError);
-      return;
-    }
-    if (!displayName.trim()) {
-      setError('Ingresá tu nombre.');
-      return;
-    }
-    if (!city.trim()) {
-      setError('Ingresá tu ciudad.');
-      return;
-    }
+    if (usernameError) return setError(usernameError);
+    if (!displayName.trim()) return setError('Ingresá tu nombre.');
+    if (!city.trim()) return setError('Ingresá tu ciudad.');
 
     setLoading(true);
     try {
-      const taken = await isUsernameTaken(username);
-      if (taken) {
+      if (await isUsernameTaken(username)) {
         setError('Ese nombre de usuario ya está en uso.');
         setLoading(false);
         return;
       }
-      const profile = await createUserProfile({
-        uid: firebaseUid,
-        email,
-        username,
-        displayName,
-        city,
-      });
+      const profile = await createUserProfile({ uid: firebaseUid, email, username, displayName, city });
       setProfile(profile);
-      // El layout de (auth) detecta que ya hay perfil y redirige a las tabs.
     } catch (err) {
       console.warn('[Ronda] Error creando perfil', err);
-      // La reserva del nombre de usuario es atómica del lado del servidor:
-      // si falla acá es porque alguien lo tomó entre la validación y el alta.
       setError(
         isPermissionDenied(err)
           ? 'Ese nombre de usuario ya está en uso. Probá con otro.'
@@ -72,77 +54,88 @@ export default function OnboardingScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title} accessibilityRole="header">
-          Contanos sobre vos
-        </Text>
-        <Text style={styles.subtitle}>Así te van a encontrar otros usuarios en Ronda.</Text>
+    <AuthScaffold
+      eyebrow="PASO 2 DE 2"
+      title="Hacé tu lugar en la ronda."
+      subtitle="Estos datos aparecen en tu perfil y ayudan a descubrir prendas cerca."
+    >
+      <View style={styles.steps} accessibilityLabel="Paso 2 de 2">
+        <View style={styles.stepActive} />
+        <View style={styles.stepActive} />
+      </View>
 
-        <TextField
-          label="Nombre para mostrar"
-          placeholder="Ej: Sofía Martínez"
-          value={displayName}
-          onChangeText={setDisplayName}
-        />
-        <TextField
-          label="Nombre de usuario"
-          placeholder="ej: sofia.vintage"
-          autoCapitalize="none"
-          autoCorrect={false}
-          value={username}
-          onChangeText={setUsername}
-          maxLength={MAX_USERNAME_LENGTH}
-          hint="Minúsculas, números, puntos y guiones bajos. No se puede cambiar después."
-        />
-        <TextField
-          label="Ciudad"
-          placeholder="Ej: Buenos Aires"
-          value={city}
-          onChangeText={setCity}
-          hint="Se muestra en tus publicaciones para que sepan de dónde sos."
-        />
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+      <View style={styles.profileHint}>
+        <View style={styles.avatarPreview}>
+          <Ionicons name="person" size={24} color={Colors.plum} />
+        </View>
+        <View style={styles.profileHintText}>
+          <Text style={styles.profileHintTitle}>Tu identidad en Ronda</Text>
+          <Text style={styles.profileHintBody}>La foto es opcional; tus iniciales también quedan lindas.</Text>
+        </View>
+      </View>
 
-        <Button label="Continuar" onPress={handleContinue} loading={loading} style={styles.button} />
-        <Button
-          label="Cerrar sesión"
-          variant="ghost"
-          onPress={() => signOut()}
-          style={styles.button}
-          small
-        />
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <TextField
+        label="Nombre para mostrar"
+        placeholder="Ej: Sofía Martínez"
+        value={displayName}
+        onChangeText={setDisplayName}
+      />
+      <TextField
+        label="Nombre de usuario"
+        placeholder="sofia.vintage"
+        autoCapitalize="none"
+        autoCorrect={false}
+        value={username}
+        onChangeText={setUsername}
+        maxLength={MAX_USERNAME_LENGTH}
+        showCounter
+        hint="Minúsculas, números, puntos y guiones bajos. Después queda fijo."
+      />
+      <TextField
+        label="Ciudad"
+        placeholder="Ej: Buenos Aires"
+        value={city}
+        onChangeText={setCity}
+        hint="La mostramos para facilitar encuentros y envíos acordados por fuera."
+      />
+      {error ? <InlineNotice message={error} /> : null}
+      <Button
+        label="Empezar a descubrir"
+        icon="sparkles"
+        onPress={handleContinue}
+        loading={loading}
+        style={styles.button}
+      />
+      <Button label="Usar otra cuenta" variant="ghost" onPress={() => signOut()} style={styles.logout} small />
+    </AuthScaffold>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: Colors.background },
-  container: {
-    flexGrow: 1,
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.xxxl,
-    paddingBottom: Spacing.xxxl,
-  },
-  title: {
-    ...Typography.display,
-    fontSize: 26,
-    marginBottom: Spacing.xs,
-  },
-  subtitle: {
-    ...Typography.caption,
-    marginBottom: Spacing.xxl,
-  },
-  button: {
-    marginTop: Spacing.md,
-  },
-  error: {
-    ...Typography.caption,
-    color: Colors.dangerInk,
-    backgroundColor: Colors.dangerSoft,
+  steps: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.xl },
+  stepActive: { flex: 1, height: 5, borderRadius: 999, backgroundColor: Colors.primary },
+  profileHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    backgroundColor: Colors.butterSoft,
     padding: Spacing.md,
-    borderRadius: Radius.md,
-    marginBottom: Spacing.md,
+    borderRadius: Radius.lg,
+    marginBottom: Spacing.xl,
   },
+  avatarPreview: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.borderStrong,
+  },
+  profileHintText: { flex: 1 },
+  profileHintTitle: { ...Typography.label },
+  profileHintBody: { ...Typography.caption },
+  button: { marginTop: Spacing.lg },
+  logout: { marginTop: Spacing.sm },
 });

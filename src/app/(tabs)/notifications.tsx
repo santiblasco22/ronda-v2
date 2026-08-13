@@ -23,9 +23,17 @@ const ICONS: Record<NotificationType, keyof typeof Ionicons.glyphMap> = {
   pro_request_rejected: 'alert-circle',
 };
 
+const ICON_BACKGROUNDS: Record<NotificationType, string> = {
+  new_follower: Colors.plumSoft,
+  new_rating: Colors.butterSoft,
+  listing_liked: Colors.primarySoft,
+  pro_request_approved: Colors.successSoft,
+  pro_request_rejected: Colors.dangerSoft,
+};
+
 export default function NotificationsScreen() {
   const router = useRouter();
-  const { data: notifications, isLoading } = useNotifications();
+  const { data: notifications, isLoading, isError, refetch } = useNotifications();
   const markRead = useMarkNotificationRead();
   const markAllRead = useMarkAllNotificationsRead();
 
@@ -41,15 +49,16 @@ export default function NotificationsScreen() {
   return (
     <Screen padded={false}>
       <ScreenHeader
-        title="Avisos"
-        subtitle={unreadCount > 0 ? `${unreadCount} sin leer` : undefined}
+        title="Novedades"
+        subtitle={unreadCount > 0 ? `${unreadCount} ${unreadCount === 1 ? 'novedad' : 'novedades'} por mirar` : 'Estás al día'}
         action={
           unreadCount > 0 ? (
             <Pressable
               onPress={() => notifications && markAllRead.mutate(notifications)}
               hitSlop={HitSlop.medium}
               accessibilityRole="button"
-              accessibilityLabel="Marcar todos los avisos como leídos"
+              accessibilityLabel="Marcar todas las novedades como leídas"
+              style={styles.markAllButton}
             >
               <Text style={styles.markAll}>Marcar todo</Text>
             </Pressable>
@@ -58,7 +67,16 @@ export default function NotificationsScreen() {
       />
 
       {isLoading ? (
-        <LoadingView />
+        <LoadingView label="Buscando novedades…" />
+      ) : isError ? (
+        <EmptyState
+          icon="cloud-offline-outline"
+          tone="danger"
+          title="No pudimos cargar tus novedades"
+          subtitle="Revisá tu conexión y volvé a intentar."
+          actionLabel="Reintentar"
+          onAction={() => refetch()}
+        />
       ) : (
         <FlatList
           data={notifications ?? []}
@@ -75,15 +93,15 @@ export default function NotificationsScreen() {
               accessibilityRole="button"
               accessibilityLabel={`${item.read ? '' : 'Sin leer. '}${item.title}. ${item.body}`}
             >
-              <View style={[styles.iconWrapper, !item.read && styles.iconWrapperUnread]}>
+              <View style={[styles.iconWrapper, { backgroundColor: ICON_BACKGROUNDS[item.type] }]}>
                 <Ionicons
                   name={ICONS[item.type] ?? 'notifications'}
                   size={18}
-                  color={Colors.primaryInk}
+                  color={item.read ? Colors.textMuted : Colors.plum}
                 />
               </View>
               <View style={styles.itemBody}>
-                <Text style={styles.itemTitle}>{item.title}</Text>
+                <Text style={[styles.itemTitle, !item.read && styles.itemTitleUnread]}>{item.title}</Text>
                 <Text style={styles.itemBodyText}>{item.body}</Text>
                 <Text style={styles.itemDate}>{formatRelativeDate(item.createdAt)}</Text>
               </View>
@@ -93,8 +111,8 @@ export default function NotificationsScreen() {
           ListEmptyComponent={
             <EmptyState
               icon="notifications-outline"
-              title="No tenés avisos todavía"
-              subtitle="Te avisamos cuando alguien empiece a seguirte o te deje una calificación."
+              title="Todo tranquilo por acá"
+              subtitle="Cuando alguien te siga, guarde una prenda o deje una opinión, te lo contamos acá."
             />
           }
         />
@@ -109,10 +127,15 @@ const styles = StyleSheet.create({
     color: Colors.primaryInk,
     fontWeight: '700',
   },
+  markAllButton: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.sm,
+  },
   list: {
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.xl,
-    gap: Spacing.md,
+    gap: Spacing.sm,
     flexGrow: 1,
   },
   item: {
@@ -120,14 +143,15 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: Spacing.md,
     backgroundColor: Colors.surface,
-    borderRadius: Radius.lg,
+    borderRadius: Radius.xl,
     padding: Spacing.lg,
     borderWidth: 1,
     borderColor: Colors.border,
   },
   itemUnread: {
     borderColor: Colors.primary,
-    backgroundColor: Colors.surface,
+    borderLeftWidth: 4,
+    backgroundColor: Colors.surfaceRaised,
   },
   itemPressed: {
     backgroundColor: Colors.primarySoft,
@@ -140,9 +164,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconWrapperUnread: {
-    backgroundColor: Colors.primarySoft,
-  },
   itemBody: {
     flex: 1,
     gap: 2,
@@ -151,6 +172,7 @@ const styles = StyleSheet.create({
     ...Typography.bodyStrong,
     fontSize: 14,
   },
+  itemTitleUnread: { fontWeight: '900' },
   itemBodyText: {
     ...Typography.caption,
   },

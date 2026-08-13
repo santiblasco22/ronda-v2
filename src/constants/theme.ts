@@ -2,14 +2,7 @@ import type { TextStyle, ViewStyle } from 'react-native';
 
 import { Colors } from './colors';
 
-/**
- * Sistema visual de Ronda: una escala de espaciado de 4, un puñado de radios
- * y una escala tipográfica. La idea es que las pantallas compongan estos
- * tokens en vez de inventar números sueltos, así el ritmo vertical y el peso
- * del texto son los mismos en toda la app.
- */
-
-/** Escala de espaciado en múltiplos de 4. */
+/** Ritmo base de 4pt, compartido por toda la interfaz. */
 export const Spacing = {
   xs: 4,
   sm: 8,
@@ -18,21 +11,18 @@ export const Spacing = {
   xl: 20,
   xxl: 28,
   xxxl: 40,
+  jumbo: 56,
 } as const;
 
 export const Radius = {
   sm: 8,
   md: 12,
-  lg: 16,
-  xl: 22,
-  xxl: 28,
+  lg: 18,
+  xl: 24,
+  xxl: 32,
   pill: 999,
 } as const;
 
-/**
- * Tamaño mínimo de un objetivo táctil. Los iconos sueltos usan `hitSlop` para
- * llegar a esta medida sin agrandar el dibujo.
- */
 export const MIN_TOUCH_TARGET = 44;
 
 export const HitSlop = {
@@ -40,47 +30,42 @@ export const HitSlop = {
   medium: { top: 12, bottom: 12, left: 12, right: 12 },
 } as const;
 
-/** Extra hitSlop so a visual control of `size` px still hits MIN_TOUCH_TARGET. */
 export function hitSlopForSize(size: number) {
   const extra = Math.max(0, Math.ceil((MIN_TOUCH_TARGET - size) / 2));
   return { top: extra, bottom: extra, left: extra, right: extra };
 }
 
 export const Typography = {
-  /** Títulos de bienvenida / marca. */
   display: {
-    fontSize: 30,
-    lineHeight: 36,
-    fontWeight: '800',
-    letterSpacing: -0.5,
+    fontSize: 38,
+    lineHeight: 42,
+    fontWeight: '900',
+    letterSpacing: -1.2,
     color: Colors.text,
   },
-  /** Título de pantalla. */
   title: {
-    fontSize: 24,
-    lineHeight: 30,
-    fontWeight: '800',
-    letterSpacing: -0.3,
+    fontSize: 27,
+    lineHeight: 32,
+    fontWeight: '900',
+    letterSpacing: -0.7,
     color: Colors.text,
   },
-  /** Título de tarjeta o sección grande. */
   heading: {
-    fontSize: 19,
-    lineHeight: 25,
+    fontSize: 21,
+    lineHeight: 27,
     fontWeight: '800',
-    letterSpacing: -0.2,
+    letterSpacing: -0.35,
     color: Colors.text,
   },
-  /** Encabezado de bloque dentro de una pantalla. */
   sectionTitle: {
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: '700',
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: '800',
     color: Colors.text,
   },
   body: {
     fontSize: 15,
-    lineHeight: 22,
+    lineHeight: 23,
     fontWeight: '400',
     color: Colors.text,
   },
@@ -92,40 +77,38 @@ export const Typography = {
   },
   label: {
     fontSize: 14,
-    lineHeight: 18,
-    fontWeight: '600',
+    lineHeight: 19,
+    fontWeight: '700',
     color: Colors.text,
   },
   caption: {
     fontSize: 13,
-    lineHeight: 18,
+    lineHeight: 19,
     fontWeight: '400',
     color: Colors.textMuted,
   },
   micro: {
     fontSize: 11,
     lineHeight: 15,
-    fontWeight: '600',
+    fontWeight: '700',
     color: Colors.textMuted,
-    letterSpacing: 0.2,
+    letterSpacing: 0.45,
   },
 } satisfies Record<string, TextStyle>;
 
 export const Shadows = {
-  /** Elevación sutil para tarjetas sobre el fondo crema. */
   card: {
-    shadowColor: '#3D2E1A',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    shadowColor: '#44223D',
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 7 },
+    elevation: 3,
   },
-  /** Botones flotantes del mazo de swipe. */
   floating: {
-    shadowColor: '#3D2E1A',
-    shadowOpacity: 0.16,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 5,
+    shadowColor: '#44223D',
+    shadowOpacity: 0.2,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 9 },
+    elevation: 7,
   },
 } satisfies Record<string, ViewStyle>;

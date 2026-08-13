@@ -7,6 +7,7 @@ import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
 import { EmptyState, LoadingView } from '@/components/EmptyState';
 import { FollowButton } from '@/components/FollowButton';
+import { InlineNotice } from '@/components/FormSection';
 import { ListingPhoto } from '@/components/ListingPhoto';
 import { Screen } from '@/components/Screen';
 import { SocialLinksRow } from '@/components/SocialLinksRow';
@@ -24,11 +25,25 @@ export default function ListingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const myUid = useAuthStore((s) => s.firebaseUid);
-  const { data: listing, isLoading } = useListing(id);
-  const { data: seller } = useUserProfile(listing?.sellerId);
+  const { data: listing, isLoading, isError, refetch } = useListing(id);
+  const { data: seller, isError: sellerError, refetch: refetchSeller } = useUserProfile(listing?.sellerId);
   const [photoIndex, setPhotoIndex] = useState(0);
 
   if (isLoading) return <LoadingView />;
+  if (isError) {
+    return (
+      <Screen>
+        <EmptyState
+          icon="cloud-offline-outline"
+          tone="danger"
+          title="No pudimos abrir esta prenda"
+          subtitle="Revisá tu conexión y volvé a intentar."
+          actionLabel="Reintentar"
+          onAction={() => refetch()}
+        />
+      </Screen>
+    );
+  }
   if (!listing) {
     return (
       <Screen>
@@ -83,6 +98,7 @@ export default function ListingDetailScreen() {
         </View>
 
         <View style={styles.content}>
+          <Text style={styles.eyebrow}>HALLAZGO EN RONDA</Text>
           <View style={styles.titleRow}>
             <Text style={styles.title}>{listing.title}</Text>
             <StatusBadge status={listing.status} />
@@ -110,9 +126,7 @@ export default function ListingDetailScreen() {
             {listing.likeCount > 0 ? (
               <View style={styles.metaItem}>
                 <Ionicons name="heart" size={14} color={Colors.like} />
-                <Text style={styles.meta}>
-                  {listing.likeCount} {listing.likeCount === 1 ? 'me gusta' : 'me gusta'}
-                </Text>
+                <Text style={styles.meta}>{listing.likeCount} me gusta</Text>
               </View>
             ) : null}
           </View>
@@ -137,11 +151,24 @@ export default function ListingDetailScreen() {
 
           {!isOwner ? (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Contactar al vendedor</Text>
-              {hasContactLinks && seller ? (
+              <View style={styles.sectionTitleRow}>
+                <View style={styles.sectionIcon}>
+                  <Ionicons name="paper-plane-outline" size={18} color={Colors.plum} />
+                </View>
+                <View style={styles.sectionTitleText}>
+                  <Text style={styles.sectionEyebrow}>COORDINÁ POR FUERA</Text>
+                  <Text style={styles.sectionTitle}>Contactá al vendedor</Text>
+                </View>
+              </View>
+              {sellerError ? (
+                <>
+                  <InlineNotice message="No pudimos cargar las vías de contacto. Revisá tu conexión y volvé a intentar." />
+                  <Button label="Reintentar contacto" variant="outline" small onPress={() => refetchSeller()} />
+                </>
+              ) : hasContactLinks && seller ? (
                 <>
                   <Text style={styles.sectionHint}>
-                    El acuerdo se cierra por fuera de Ronda: escribile por su red preferida.
+                    Elegí su red preferida para consultar y acordar la entrega. Ronda no procesa pagos.
                   </Text>
                   <SocialLinksRow links={seller.socialLinks} contactContext={listing.title} size={22} />
                 </>
@@ -203,7 +230,7 @@ const styles = StyleSheet.create({
   },
   photo: {
     width: SCREEN_WIDTH,
-    height: SCREEN_WIDTH,
+    height: SCREEN_WIDTH * 1.08,
   },
   dotsRow: {
     position: 'absolute',
@@ -228,6 +255,16 @@ const styles = StyleSheet.create({
   content: {
     padding: Spacing.xl,
     gap: Spacing.sm,
+    marginTop: -Spacing.xxl,
+    borderTopLeftRadius: Radius.xxl,
+    borderTopRightRadius: Radius.xxl,
+    backgroundColor: Colors.background,
+  },
+  eyebrow: {
+    ...Typography.micro,
+    color: Colors.primaryInk,
+    marginTop: Spacing.sm,
+    textTransform: 'uppercase',
   },
   titleRow: {
     flexDirection: 'row',
@@ -243,7 +280,7 @@ const styles = StyleSheet.create({
   price: {
     ...Typography.display,
     fontSize: 25,
-    color: Colors.primaryInk,
+    color: Colors.plum,
   },
   tagsRow: {
     flexDirection: 'row',
@@ -265,6 +302,7 @@ const styles = StyleSheet.create({
   tagLabel: {
     ...Typography.micro,
     fontWeight: '600',
+    textTransform: 'uppercase',
   },
   metaRow: {
     flexDirection: 'row',
@@ -291,7 +329,7 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xl,
     padding: Spacing.lg,
     backgroundColor: Colors.surface,
-    borderRadius: Radius.lg,
+    borderRadius: Radius.xl,
     borderWidth: 1,
     borderColor: Colors.border,
     ...Shadows.card,
@@ -315,6 +353,26 @@ const styles = StyleSheet.create({
   section: {
     marginTop: Spacing.xl,
     gap: Spacing.md,
+    padding: Spacing.lg,
+    borderRadius: Radius.xl,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  sectionIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.butterSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionTitleText: { flex: 1 },
+  sectionEyebrow: {
+    ...Typography.micro,
+    color: Colors.primaryInk,
+    textTransform: 'uppercase',
   },
   sectionTitle: {
     ...Typography.sectionTitle,

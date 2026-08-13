@@ -1,10 +1,12 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
-import { LoadingView } from '@/components/EmptyState';
+import { EmptyState, LoadingView } from '@/components/EmptyState';
+import { FormSection, InlineNotice } from '@/components/FormSection';
 import { RatingStarsInput } from '@/components/RatingStars';
 import { TextField } from '@/components/TextField';
 import { Colors } from '@/constants/colors';
@@ -23,159 +25,76 @@ export default function RateUserScreen() {
   const myUid = useAuthStore((s) => s.firebaseUid);
   const { data: ratedUser, isLoading } = useUserProfile(params.userId);
   const listingId = params.listingId?.trim() || null;
-  // Una calificación por persona: si ya calificó a este vendedor (desde
-  // cualquier publicación), no puede volver a hacerlo.
   const { data: alreadyRated } = useHasRated(params.userId);
   const createRating = useCreateRating();
-
   const [stars, setStars] = useState(5);
   const [comment, setComment] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  if (isLoading || !ratedUser) return <LoadingView />;
-
-  if (myUid === params.userId) {
-    return (
-      <ScrollWrapper>
-        <Text style={styles.title}>No podés calificarte a vos mismo.</Text>
-        <Button label="Volver" variant="outline" onPress={() => router.back()} />
-      </ScrollWrapper>
-    );
-  }
-
-  if (alreadyRated) {
-    return (
-      <ScrollWrapper>
-        <Text style={styles.title}>Ya calificaste a {ratedUser.displayName}.</Text>
-        <Text style={styles.subtitle}>
-          Cada cuenta puede dejar una sola calificación por vendedor. ¡Gracias por ayudar a la
-          comunidad de Ronda!
-        </Text>
-        <Button label="Volver" variant="outline" onPress={() => router.back()} />
-      </ScrollWrapper>
-    );
-  }
-
+  if (isLoading || !ratedUser) return <LoadingView label="Preparando la opinión…" />;
+  if (myUid === params.userId) return <State title="Tu propio ropero no necesita calificación" subtitle="Las opiniones las dejan otras personas de la comunidad." onBack={() => router.back()} />;
+  if (alreadyRated) return <State title={`Ya calificaste a ${ratedUser.displayName}`} subtitle="Cada cuenta puede dejar una sola opinión por vendedor. Gracias por aportar confianza a la ronda." onBack={() => router.back()} />;
   const ratedUserId = ratedUser.uid;
 
   async function handleSubmit() {
     setError(null);
     try {
-      await createRating.mutateAsync({
-        ratedUserId,
-        listingId,
-        listingTitle: params.listingTitle?.trim() || null,
-        stars,
-        comment,
-      });
+      await createRating.mutateAsync({ ratedUserId, listingId, listingTitle: params.listingTitle?.trim() || null, stars, comment });
       router.back();
     } catch (err) {
-      setError(
-        isPermissionDenied(err)
-          ? 'Ya calificaste a esta persona: cada cuenta puede dejar una sola calificación.'
-          : 'No pudimos enviar tu calificación.'
-      );
+      setError(isPermissionDenied(err) ? 'Ya calificaste a esta persona: cada cuenta puede dejar una sola opinión.' : 'No pudimos enviar tu calificación.');
     }
   }
 
   return (
-    <ScrollWrapper>
-      <View style={styles.header}>
-        <Avatar url={ratedUser.avatarUrl} name={ratedUser.displayName} size={56} />
-        <View style={styles.headerText}>
-          <Text style={styles.title}>Calificar a {ratedUser.displayName}</Text>
-          {params.listingTitle ? (
-            <Text style={styles.subtitle}>Sobre &ldquo;{params.listingTitle}&rdquo;</Text>
-          ) : null}
-        </View>
-      </View>
-
-      <View style={styles.starsCard}>
-        <RatingStarsInput value={stars} onChange={setStars} />
-        <Text style={styles.starsLabel}>{STAR_LABELS[stars]}</Text>
-      </View>
-
-      <TextField
-        label="Comentario (opcional)"
-        placeholder="¿Cómo fue tu experiencia? ¿La prenda era como en la foto?"
-        value={comment}
-        onChangeText={setComment}
-        maxLength={MAX_RATING_COMMENT_LENGTH}
-        showCounter
-        multiline
-        numberOfLines={4}
-        style={styles.textarea}
-      />
-
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      <Button label="Enviar calificación" onPress={handleSubmit} loading={createRating.isPending} />
-      <Text style={styles.disclaimer}>
-        Las calificaciones son públicas y no se pueden editar ni borrar.
-      </Text>
-    </ScrollWrapper>
-  );
-}
-
-function ScrollWrapper({ children }: { children: React.ReactNode }) {
-  return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        {children}
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <View style={styles.hero}>
+          <View style={styles.avatarWrap}><Avatar url={ratedUser.avatarUrl} name={ratedUser.displayName} size={72} /></View>
+          <Text style={styles.eyebrow}>TU EXPERIENCIA CUENTA</Text>
+          <Text style={styles.title}>¿Cómo fue con {ratedUser.displayName}?</Text>
+          {params.listingTitle ? <Text style={styles.subtitle}>Sobre “{params.listingTitle}”</Text> : <Text style={styles.subtitle}>Tu opinión ayuda a comprar y vender con más confianza.</Text>}
+        </View>
+
+        <FormSection icon="star-outline" title="Tu calificación">
+          <View style={styles.starsBlock}>
+            <RatingStarsInput value={stars} onChange={setStars} />
+            <View style={styles.starsLabelPill}><Text style={styles.starsLabel}>{STAR_LABELS[stars]}</Text></View>
+          </View>
+          <TextField label="Comentario (opcional)" placeholder="¿Cómo fue la comunicación? ¿La prenda era como esperabas?" value={comment} onChangeText={setComment} maxLength={MAX_RATING_COMMENT_LENGTH} showCounter multiline numberOfLines={4} style={styles.textarea} />
+          {error ? <InlineNotice message={error} /> : null}
+          <Button label="Publicar opinión" icon="checkmark" onPress={handleSubmit} loading={createRating.isPending} />
+        </FormSection>
+
+        <View style={styles.disclaimer}>
+          <Ionicons name="information-circle-outline" size={18} color={Colors.textMuted} />
+          <Text style={styles.disclaimerText}>Las opiniones son públicas y no se pueden editar ni borrar.</Text>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
+function State({ title, subtitle, onBack }: { title: string; subtitle: string; onBack: () => void }) {
+  return <View style={styles.flex}><EmptyState icon="star-outline" title={title} subtitle={subtitle} actionLabel="Volver" onAction={onBack} /></View>;
+}
+
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: Colors.background },
-  container: {
-    padding: Spacing.xl,
-    paddingBottom: Spacing.xxxl,
-    gap: Spacing.lg,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  headerText: {
-    flex: 1,
-    gap: 2,
-  },
-  title: {
-    ...Typography.heading,
-  },
-  subtitle: {
-    ...Typography.caption,
-  },
-  starsCard: {
-    alignItems: 'center',
-    gap: Spacing.sm,
-    paddingVertical: Spacing.xl,
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  starsLabel: {
-    ...Typography.label,
-    color: Colors.primaryInk,
-  },
-  textarea: {
-    height: 108,
-    textAlignVertical: 'top',
-    paddingTop: Spacing.md,
-  },
-  error: {
-    ...Typography.caption,
-    color: Colors.dangerInk,
-    backgroundColor: Colors.dangerSoft,
-    padding: Spacing.md,
-    borderRadius: Radius.md,
-  },
-  disclaimer: {
+  container: { padding: Spacing.lg, paddingBottom: Spacing.jumbo, gap: Spacing.lg },
+  hero: { alignItems: 'center', paddingHorizontal: Spacing.md, paddingBottom: Spacing.sm },
+  avatarWrap: { padding: 4, borderRadius: Radius.pill, backgroundColor: Colors.butter, marginBottom: Spacing.lg, transform: [{ rotate: '-3deg' }] },
+  eyebrow: {
     ...Typography.micro,
-    textAlign: 'center',
+    color: Colors.primaryInk,
+    textTransform: 'uppercase',
   },
+  title: { ...Typography.title, fontSize: 25, textAlign: 'center', marginTop: Spacing.xs },
+  subtitle: { ...Typography.body, color: Colors.textMuted, textAlign: 'center', marginTop: Spacing.sm },
+  starsBlock: { alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.md },
+  starsLabelPill: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: Radius.pill, backgroundColor: Colors.butterSoft },
+  starsLabel: { ...Typography.label, color: Colors.plum },
+  textarea: { height: 112, textAlignVertical: 'top', paddingTop: Spacing.md },
+  disclaimer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, paddingHorizontal: Spacing.md },
+  disclaimerText: { ...Typography.micro, flex: 1 },
 });

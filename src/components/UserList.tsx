@@ -14,15 +14,33 @@ import { Screen } from './Screen';
 export function UserList({
   users,
   isLoading,
+  isError,
+  onRetry,
   emptyTitle,
   emptySubtitle,
 }: {
   users: FollowEdge[] | undefined;
   isLoading: boolean;
+  isError?: boolean;
+  onRetry?: () => void;
   emptyTitle: string;
   emptySubtitle?: string;
 }) {
   if (isLoading) return <LoadingView />;
+  if (isError) {
+    return (
+      <Screen>
+        <EmptyState
+          icon="cloud-offline-outline"
+          tone="danger"
+          title="No pudimos cargar esta lista"
+          subtitle="Revisá tu conexión y volvé a intentar."
+          actionLabel={onRetry ? 'Reintentar' : undefined}
+          onAction={onRetry}
+        />
+      </Screen>
+    );
+  }
 
   return (
     <Screen padded={false}>
@@ -71,12 +89,13 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.lg,
     backgroundColor: Colors.surface,
-    borderRadius: Radius.lg,
+    borderRadius: Radius.xl,
     borderWidth: 1,
     borderColor: Colors.border,
   },
   rowPressed: {
-    borderColor: Colors.primary,
+    borderColor: Colors.primaryInk,
+    backgroundColor: Colors.primarySoft,
   },
   info: {
     flex: 1,

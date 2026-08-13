@@ -13,14 +13,20 @@ export function ScreenHeader({
   title,
   subtitle,
   action,
+  eyebrow = 'RONDA',
 }: {
   title: string;
   subtitle?: string;
   action?: ReactNode;
+  eyebrow?: string;
 }) {
   return (
     <View style={styles.header}>
       <View style={styles.titleBlock}>
+        <View style={styles.eyebrowRow}>
+          <View style={styles.thread} />
+          <Text style={styles.eyebrow}>{eyebrow}</Text>
+        </View>
         <Text style={styles.title} accessibilityRole="header">
           {title}
         </Text>
@@ -67,12 +73,29 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: Spacing.md,
     paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.sm,
-    paddingBottom: Spacing.md,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.lg,
   },
   titleBlock: {
     flex: 1,
     gap: 2,
+  },
+  eyebrowRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginBottom: 2,
+  },
+  thread: {
+    width: 18,
+    height: 3,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.primary,
+  },
+  eyebrow: {
+    ...Typography.micro,
+    color: Colors.primaryInk,
+    textTransform: 'uppercase',
   },
   title: {
     ...Typography.title,
@@ -83,9 +106,12 @@ const styles = StyleSheet.create({
   iconButton: {
     width: MIN_TOUCH_TARGET,
     height: MIN_TOUCH_TARGET,
-    borderRadius: Radius.pill,
+    borderRadius: Radius.md,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   iconButtonPressed: {
     backgroundColor: Colors.primarySoft,

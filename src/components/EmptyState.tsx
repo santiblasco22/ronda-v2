@@ -27,6 +27,7 @@ export function EmptyState({
 
   return (
     <View style={styles.container}>
+      <Text style={styles.eyebrow}>HACEMOS OTRA RONDA</Text>
       <View style={[styles.iconCircle, { backgroundColor: palette.background }]}>
         <Ionicons name={icon} size={30} color={palette.icon} />
       </View>
@@ -41,9 +42,11 @@ export function EmptyState({
 
 export function LoadingView({ label = 'Cargando…' }: { label?: string }) {
   return (
-    <View style={styles.container} accessibilityRole="progressbar" accessibilityLabel={label}>
-      <ActivityIndicator color={Colors.primaryInk} />
-      <Text style={styles.subtitle}>{label}</Text>
+    <View style={styles.loadingContainer} accessibilityRole="progressbar" accessibilityLabel={label}>
+      <View style={styles.loadingIcon}>
+        <ActivityIndicator color={Colors.primaryInk} />
+      </View>
+      <Text style={styles.loadingLabel}>{label}</Text>
     </View>
   );
 }
@@ -59,22 +62,28 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: Spacing.xxl,
+    paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.xxl,
     gap: Spacing.sm,
+    margin: Spacing.lg,
+    borderRadius: Radius.xxl,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderStyle: 'dashed',
+    backgroundColor: Colors.surface,
   },
   iconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: Radius.pill,
+    width: 68,
+    height: 68,
+    borderRadius: Radius.xl,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Spacing.xs,
   },
   title: {
     ...Typography.heading,
-    fontSize: 17,
     textAlign: 'center',
+    marginTop: Spacing.xs,
   },
   subtitle: {
     ...Typography.caption,
@@ -84,4 +93,28 @@ const styles = StyleSheet.create({
   action: {
     marginTop: Spacing.md,
   },
+  eyebrow: {
+    ...Typography.micro,
+    color: Colors.primaryInk,
+    marginBottom: Spacing.xs,
+    textTransform: 'uppercase',
+  },
+  loadingContainer: {
+    flex: 1,
+    minHeight: 220,
+    backgroundColor: Colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.md,
+  },
+  loadingIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    transform: [{ rotate: '-3deg' }],
+  },
+  loadingLabel: { ...Typography.caption, fontWeight: '600' },
 });

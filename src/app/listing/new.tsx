@@ -1,17 +1,15 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/Button';
 import { Chip } from '@/components/Chip';
+import { FormSection, InlineNotice } from '@/components/FormSection';
 import { PhotoPicker, type PickedPhoto } from '@/components/PhotoPicker';
 import { TextField } from '@/components/TextField';
 import { Colors } from '@/constants/colors';
-import {
-  getListingCapFor,
-  MAX_LISTING_DESCRIPTION_LENGTH,
-  MAX_LISTING_TITLE_LENGTH,
-} from '@/constants/limits';
+import { getListingCapFor, MAX_LISTING_DESCRIPTION_LENGTH, MAX_LISTING_TITLE_LENGTH } from '@/constants/limits';
 import { Radius, Spacing, Typography } from '@/constants/theme';
 import { useCreateListing } from '@/features/listings/useListings';
 import { PhotoUploadError } from '@/lib/photoUploads';
@@ -31,7 +29,6 @@ export default function NewListingScreen() {
   const router = useRouter();
   const profile = useAuthStore((s) => s.profile);
   const createListing = useCreateListing();
-
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
@@ -44,9 +41,9 @@ export default function NewListingScreen() {
   const [error, setError] = useState<string | null>(null);
 
   if (!profile) return null;
-
   const cap = getListingCapFor(profile.isPro);
   const reachedCap = profile.activeListingCount >= cap;
+  const available = Math.max(cap - profile.activeListingCount, 0);
 
   async function handleSubmit() {
     setError(null);
@@ -68,16 +65,11 @@ export default function NewListingScreen() {
         condition,
         color,
         city,
-        localPhotoUris: photos.map((p) => p.uri),
+        localPhotoUris: photos.map((photo) => photo.uri),
       });
       router.replace({ pathname: '/listing/[id]', params: { id } });
     } catch (err) {
-      if (err instanceof PhotoUploadError) {
-        setError(err.message);
-        return;
-      }
-      // El tope del plan también se aplica en las reglas de Firestore, así
-      // que puede rebotar acá aunque la UI creyera que había cupo.
+      if (err instanceof PhotoUploadError) return setError(err.message);
       setError(
         isPermissionDenied(err)
           ? `Llegaste al límite de ${cap} publicaciones activas. Archivá o marcá como vendida alguna para publicar otra.`
@@ -88,157 +80,96 @@ export default function NewListingScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Publicar una prenda</Text>
-        <Text style={styles.subtitle}>
-          Te quedan {Math.max(cap - profile.activeListingCount, 0)} de {cap} publicaciones activas.
-        </Text>
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <View style={styles.intro}>
+          <Text style={styles.eyebrow}>NUEVA PUBLICACIÓN</Text>
+          <Text style={styles.title}>Poné una prenda en ronda.</Text>
+          <Text style={styles.subtitle}>Con los datos básicos alcanza. La foto y la descripción son opcionales.</Text>
+          <View style={styles.quotaPill}>
+            <Ionicons name="layers-outline" size={15} color={Colors.plum} />
+            <Text style={styles.quotaText}>{available} de {cap} lugares disponibles</Text>
+          </View>
+        </View>
 
         {reachedCap ? (
-          <View style={styles.capWarning}>
-            <Text style={styles.capWarningTitle}>Llegaste al límite de tu plan</Text>
-            <Text style={styles.capWarningText}>
-              Tenés {cap} publicaciones activas
-              {profile.isPro ? ' (plan PRO)' : ''}. Archivá o marcá como vendida alguna para liberar
-              lugar{profile.isPro ? '.' : ', o pedí una cuenta PRO.'}
-            </Text>
-            <Button
-              label="Ver mis publicaciones"
-              variant="outline"
-              small
-              onPress={() => router.replace('/my-listings')}
-            />
-          </View>
+          <FormSection icon="lock-closed-outline" title="Tu vidriera está completa" caption={`Ya tenés ${cap} publicaciones activas.`}>
+            <Text style={styles.capText}>Archivá o marcá una prenda como vendida para liberar lugar{profile.isPro ? '.' : ', o solicitá una cuenta PRO.'}</Text>
+            <Button label="Gestionar mis prendas" variant="outline" small onPress={() => router.replace('/my-listings')} />
+          </FormSection>
         ) : null}
 
-        <Text style={styles.label}>Fotos</Text>
-        <PhotoPicker photos={photos} onChange={setPhotos} />
+        <FormSection icon="camera-outline" title="Fotos" caption="Opcionales · la primera funciona como portada">
+          <PhotoPicker photos={photos} onChange={setPhotos} />
+        </FormSection>
 
-        <View style={styles.fieldsBlock}>
+        <FormSection icon="pricetag-outline" title="Lo esencial" caption="Que se entienda rápido qué ofrecés">
+          <TextField label="Título" placeholder="Ej: Campera de jean oversized" value={title} onChangeText={setTitle} maxLength={MAX_LISTING_TITLE_LENGTH} showCounter />
+          <TextField label="Precio en pesos" placeholder="Ej: 8000" keyboardType="numeric" value={price} onChangeText={setPrice} hint="Ingresá solo números." />
           <TextField
-            label="Título"
-            placeholder="Ej: Campera de jean talle M"
-            value={title}
-            onChangeText={setTitle}
-            maxLength={MAX_LISTING_TITLE_LENGTH}
-            showCounter
-          />
-          <TextField
-            label="Descripción"
-            placeholder="Contá el estado, la tela, cómo calza…"
+            label="Descripción (opcional)"
+            placeholder="Contá sobre la tela, cómo calza o cualquier detalle…"
             value={description}
             onChangeText={setDescription}
             maxLength={MAX_LISTING_DESCRIPTION_LENGTH}
+            showCounter
             multiline
             numberOfLines={4}
             style={styles.textarea}
           />
-          <TextField
-            label="Precio"
-            placeholder="Ej: 8000"
-            keyboardType="numeric"
-            value={price}
-            onChangeText={setPrice}
-            hint="Solo números, en pesos."
-          />
-        </View>
+        </FormSection>
 
-        <Text style={styles.label}>Categoría</Text>
-        <View style={styles.chipsRow}>
-          {LISTING_CATEGORIES.map((item) => (
-            <Chip key={item} label={item} selected={category === item} onPress={() => setCategory(item)} />
-          ))}
-        </View>
+        <FormSection icon="options-outline" title="Cómo es" caption="Estos datos ayudan a encontrarla">
+          <ChoiceGroup label="Categoría">
+            {LISTING_CATEGORIES.map((item) => <Chip key={item} label={item} selected={category === item} onPress={() => setCategory(item)} />)}
+          </ChoiceGroup>
+          <ChoiceGroup label="Talle">
+            {LISTING_SIZES.map((item) => <Chip key={item} label={item} selected={size === item} onPress={() => setSize(item)} />)}
+          </ChoiceGroup>
+          <ChoiceGroup label="Estado de la prenda">
+            {LISTING_CONDITIONS.map((item) => <Chip key={item} label={item} selected={condition === item} onPress={() => setCondition(item)} />)}
+          </ChoiceGroup>
+        </FormSection>
 
-        <Text style={styles.label}>Talle</Text>
-        <View style={styles.chipsRow}>
-          {LISTING_SIZES.map((item) => (
-            <Chip key={item} label={item} selected={size === item} onPress={() => setSize(item)} />
-          ))}
-        </View>
-
-        <Text style={styles.label}>Estado de la prenda</Text>
-        <View style={styles.chipsRow}>
-          {LISTING_CONDITIONS.map((item) => (
-            <Chip key={item} label={item} selected={condition === item} onPress={() => setCondition(item)} />
-          ))}
-        </View>
-
-        <View style={styles.fieldsBlock}>
-          <TextField label="Color" placeholder="Ej: Azul" value={color} onChangeText={setColor} />
+        <FormSection icon="location-outline" title="Detalles" caption="Opcionales, pero suman contexto">
+          <TextField label="Color" placeholder="Ej: Azul lavado" value={color} onChangeText={setColor} />
           <TextField label="Ciudad" placeholder="Ej: Córdoba" value={city} onChangeText={setCity} />
-        </View>
+        </FormSection>
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-
-        <Button
-          label="Publicar"
-          onPress={handleSubmit}
-          loading={createListing.isPending}
-          disabled={reachedCap}
-          style={styles.submitButton}
-        />
+        {error ? <InlineNotice message={error} /> : null}
+        <Button label="Publicar en Ronda" icon="sparkles" onPress={handleSubmit} loading={createListing.isPending} disabled={reachedCap} style={styles.submitButton} />
+        <Text style={styles.footnote}>Podés editar la publicación o cambiar su estado cuando quieras.</Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
+function ChoiceGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <View style={styles.choiceGroup}>
+      <Text style={styles.choiceLabel}>{label}</Text>
+      <View style={styles.chipsRow}>{children}</View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: Colors.background },
-  container: {
-    padding: Spacing.xl,
-    paddingBottom: Spacing.xxxl + Spacing.xl,
+  container: { padding: Spacing.lg, paddingBottom: Spacing.jumbo, gap: Spacing.lg },
+  intro: { paddingHorizontal: Spacing.xs, marginBottom: Spacing.xs },
+  eyebrow: {
+    ...Typography.micro,
+    color: Colors.primaryInk,
+    textTransform: 'uppercase',
   },
-  title: {
-    ...Typography.title,
-  },
-  subtitle: {
-    ...Typography.caption,
-    marginTop: Spacing.xs,
-    marginBottom: Spacing.xl,
-  },
-  label: {
-    ...Typography.label,
-    marginBottom: Spacing.md,
-    marginTop: Spacing.lg,
-  },
-  fieldsBlock: {
-    marginTop: Spacing.xl,
-  },
-  chipsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-  },
-  textarea: {
-    height: 108,
-    textAlignVertical: 'top',
-    paddingTop: Spacing.md,
-  },
-  error: {
-    ...Typography.caption,
-    color: Colors.dangerInk,
-    backgroundColor: Colors.dangerSoft,
-    padding: Spacing.md,
-    borderRadius: Radius.md,
-    marginTop: Spacing.lg,
-  },
-  submitButton: {
-    marginTop: Spacing.xl,
-  },
-  capWarning: {
-    backgroundColor: Colors.primarySoft,
-    borderRadius: Radius.lg,
-    padding: Spacing.lg,
-    marginBottom: Spacing.lg,
-    gap: Spacing.sm,
-    alignItems: 'flex-start',
-  },
-  capWarningTitle: {
-    ...Typography.sectionTitle,
-  },
-  capWarningText: {
-    ...Typography.caption,
-    color: Colors.text,
-  },
+  title: { ...Typography.title, marginTop: Spacing.xs },
+  subtitle: { ...Typography.body, color: Colors.textMuted, marginTop: Spacing.sm },
+  quotaPill: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginTop: Spacing.lg, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.pill, backgroundColor: Colors.butterSoft },
+  quotaText: { ...Typography.caption, color: Colors.plum, fontWeight: '700' },
+  capText: { ...Typography.body, color: Colors.textMuted },
+  textarea: { height: 112, textAlignVertical: 'top', paddingTop: Spacing.md },
+  choiceGroup: { gap: Spacing.sm },
+  choiceLabel: { ...Typography.label },
+  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  submitButton: { marginTop: Spacing.sm },
+  footnote: { ...Typography.micro, textAlign: 'center' },
 });

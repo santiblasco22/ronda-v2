@@ -23,16 +23,18 @@ de venta se hacen por fuera, en las redes del vendedor.
 
 `src/constants/theme.ts` define la escala de espaciado (múltiplos de 4), los
 radios, las sombras y la escala tipográfica; `src/constants/colors.ts` define
-la paleta. Las pantallas componen esos tokens en vez de inventar números
-sueltos, así el ritmo vertical y el peso del texto son iguales en toda la app.
+la paleta de papel, coral, manteca y ciruela. Las pantallas componen esos
+tokens en vez de inventar números sueltos, así el ritmo vertical y el peso del
+texto son iguales en toda la app. Los motivos de costura, etiquetas y prendas
+se construyen con vistas nativas, por lo que no dependen de assets remotos.
 
 Sobre contraste y objetivos táctiles:
 
-- El naranja de marca es claro, así que los rellenos primarios llevan **tinta
-  oscura** encima (6.7:1) en vez de blanco (2.3:1, ilegible al sol).
-- Para texto e iconos naranjas sobre fondo claro existe `primaryInk` (4.7:1);
-  lo mismo con `dangerInk` y `successInk`. Todos los pares de color usados
-  llegan al mínimo AA de 4.5:1.
+- El coral de marca es claro, así que los rellenos primarios llevan **tinta
+  ciruela oscura** encima (5.77:1) en vez de blanco.
+- Para texto e iconos coral sobre fondo claro existe `primaryInk` (6.04:1);
+  lo mismo con `dangerInk` y `successInk`. Los pares de color usados para
+  texto normal llegan al mínimo AA de 4.5:1.
 - Botones, chips, campos e iconos accionables miden al menos 44 px
   (`MIN_TOUCH_TARGET`), usando `hitSlop` cuando el dibujo es más chico.
 - Los controles llevan `accessibilityRole`, `accessibilityLabel` y

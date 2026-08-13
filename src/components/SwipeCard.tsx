@@ -1,5 +1,5 @@
 import { forwardRef, useImperativeHandle, useRef } from 'react';
-import { Dimensions, StyleSheet, Text } from 'react-native';
+import { Dimensions, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   interpolate,
@@ -123,10 +123,12 @@ export const SwipeCard = forwardRef<SwipeCardRef, SwipeCardProps>(function Swipe
         {isTop ? (
           <>
             <Animated.View style={[styles.stamp, styles.likeStamp, likeStampStyle]}>
-              <Text style={styles.likeText}>ME GUSTA</Text>
+              <View style={styles.stampRow}>
+                <Text style={styles.likeText}>♥ GUARDAR</Text>
+              </View>
             </Animated.View>
             <Animated.View style={[styles.stamp, styles.passStamp, passStampStyle]}>
-              <Text style={styles.passText}>PASO</Text>
+              <Text style={styles.passText}>× PASAR</Text>
             </Animated.View>
           </>
         ) : null}
@@ -145,7 +147,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: Spacing.xxl,
     borderWidth: 3,
-    borderRadius: Radius.md,
+    borderRadius: Radius.pill,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     backgroundColor: 'rgba(255,255,255,0.92)',
@@ -161,13 +163,14 @@ const styles = StyleSheet.create({
   likeText: {
     color: Colors.like,
     fontWeight: '800',
-    fontSize: 20,
-    letterSpacing: 0.5,
+    fontSize: 18,
+    letterSpacing: 0.8,
   },
   passText: {
     color: Colors.pass,
     fontWeight: '800',
-    fontSize: 20,
-    letterSpacing: 0.5,
+    fontSize: 18,
+    letterSpacing: 0.8,
   },
+  stampRow: { flexDirection: 'row', alignItems: 'center' },
 });
