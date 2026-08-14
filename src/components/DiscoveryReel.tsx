@@ -21,6 +21,7 @@ import Animated, {
 import { Colors } from '@/constants/colors';
 import { MIN_TOUCH_TARGET, Radius, Shadows, Spacing, Typography } from '@/constants/theme';
 import type { InteractionAction, Listing } from '@/types/models';
+import { firebaseErrorCode } from '@/utils/errors';
 import { formatPrice } from '@/utils/format';
 
 import { Avatar } from './Avatar';
@@ -31,6 +32,21 @@ const SWIPE_DURATION = 240;
 const SWIPE_VELOCITY = 800;
 const MIN_FAST_SWIPE_DISTANCE = 42;
 const RETURN_SPRING = { damping: 20, stiffness: 240, mass: 0.65 };
+
+function isAlreadyRecordedInteraction(error: unknown): boolean {
+  const code = firebaseErrorCode(error);
+  if (
+    code === 'already-exists' ||
+    code === 'firestore/already-exists' ||
+    code === 'permission-denied' ||
+    code === 'firestore/permission-denied'
+  ) {
+    return true;
+  }
+
+  const message = error instanceof Error ? error.message : '';
+  return /already[ -]?exists|already recorded|immutable|inmutable/i.test(message);
+}
 
 export function DiscoveryReel({
   listings,
@@ -94,6 +110,14 @@ export function DiscoveryReel({
   }
 
   async function commitPass(listing: Listing) {
+    if (
+      interactionLock.current ||
+      isCommitting ||
+      committed.current.has(listing.id)
+    ) {
+      return;
+    }
+
     interactionLock.current = true;
     committed.current.add(listing.id);
     setActions((value) => ({ ...value, [listing.id]: 'pass' }));
@@ -101,7 +125,11 @@ export function DiscoveryReel({
 
     try {
       await onPass(listing);
-    } catch {
+    } catch (error) {
+      // Una interacción existente es inmutable. Ese rechazo confirma que la
+      // prenda ya fue registrada, así que conservamos el pass optimista.
+      if (isAlreadyRecordedInteraction(error)) return;
+
       // El paging fue optimista. Si falla, devolvemos exactamente la prenda
       // que se intentó pasar al frente sin tocar el resto de la cola.
       committed.current.delete(listing.id);
@@ -221,6 +249,10 @@ function VerticalPager({
 }) {
   const [pageHeight, setPageHeight] = useState(1);
   const translateY = useSharedValue(0);
+  const paging = useSharedValue(false);
+  const panStartedDuringPaging = useSharedValue(false);
+  const swipeUpAllowed = useSharedValue(canSwipeUp);
+  const swipeDownAllowed = useSharedValue(canSwipeDown);
 
   function handleLayout(event: LayoutChangeEvent) {
     const height = event.nativeEvent.layout.height;
@@ -239,31 +271,69 @@ function VerticalPager({
     .enabled(!disabled && (canSwipeUp || canSwipeDown))
     .activeOffsetY([-12, 12])
     .failOffsetX([-34, 34])
+    .onBegin(() => {
+      panStartedDuringPaging.value = paging.value;
+      if (panStartedDuringPaging.value) return;
+      swipeUpAllowed.value = canSwipeUp;
+      swipeDownAllowed.value = canSwipeDown;
+    })
     .onUpdate((event) => {
+      if (paging.value || panStartedDuringPaging.value) return;
+
       if (event.translationY < 0) {
-        translateY.value = canSwipeUp ? event.translationY : event.translationY * 0.12;
+        translateY.value = swipeUpAllowed.value
+          ? event.translationY
+          : event.translationY * 0.12;
       } else {
-        translateY.value = canSwipeDown ? event.translationY : event.translationY * 0.12;
+        translateY.value = swipeDownAllowed.value
+          ? event.translationY
+          : event.translationY * 0.12;
       }
     })
     .onEnd((event) => {
+      if (paging.value || panStartedDuringPaging.value) {
+        panStartedDuringPaging.value = false;
+        return;
+      }
+
+      // Congelamos las direcciones disponibles en el UI thread antes de
+      // animar; no dependemos del siguiente render para bloquear la elegida.
+      swipeUpAllowed.value = canSwipeUp;
+      swipeDownAllowed.value = canSwipeDown;
+
       const threshold = pageHeight * 0.16;
       const swipedUp =
-        canSwipeUp &&
+        swipeUpAllowed.value &&
         (event.translationY < -threshold ||
           (event.translationY < -MIN_FAST_SWIPE_DISTANCE && event.velocityY < -SWIPE_VELOCITY));
       const swipedDown =
-        canSwipeDown &&
+        swipeDownAllowed.value &&
         (event.translationY > threshold ||
           (event.translationY > MIN_FAST_SWIPE_DISTANCE && event.velocityY > SWIPE_VELOCITY));
 
       if (swipedUp) {
+        paging.value = true;
+        swipeUpAllowed.value = false;
+        swipeDownAllowed.value = false;
         translateY.value = withTiming(-pageHeight, { duration: SWIPE_DURATION }, (finished) => {
+          paging.value = false;
           if (finished) runOnJS(finishPageChange)('up');
+          else {
+            swipeUpAllowed.value = canSwipeUp;
+            swipeDownAllowed.value = canSwipeDown;
+          }
         });
       } else if (swipedDown) {
+        paging.value = true;
+        swipeUpAllowed.value = false;
+        swipeDownAllowed.value = false;
         translateY.value = withTiming(pageHeight, { duration: SWIPE_DURATION }, (finished) => {
+          paging.value = false;
           if (finished) runOnJS(finishPageChange)('down');
+          else {
+            swipeUpAllowed.value = canSwipeUp;
+            swipeDownAllowed.value = canSwipeDown;
+          }
         });
       } else {
         translateY.value = withSpring(0, RETURN_SPRING);
