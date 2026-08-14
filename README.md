@@ -1,7 +1,7 @@
 # Ronda
 
 Ronda es una red social de descubrimiento de ropa usada: publicá tus prendas,
-descubrí las de otras personas deslizando (swipe), seguí a vendedores que te
+descubrí las de otras personas en un reel vertical, seguí a vendedores que te
 gusten y contactalos directamente por Instagram, WhatsApp o Facebook. No hay
 pagos, envíos, billetera ni chat dentro de la app — el contacto y el acuerdo
 de venta se hacen por fuera, en las redes del vendedor.
@@ -14,8 +14,8 @@ de venta se hacen por fuera, en las redes del vendedor.
   **opcional** (ver "Fotos" más abajo).
 - **TanStack Query** para el estado de servidor (fetch/cache/mutaciones) y
   **Zustand** para estado de cliente (sesión de auth, filtros de búsqueda).
-- **react-native-gesture-handler + react-native-reanimated** para el mazo de
-  swipe de Descubrir.
+- **react-native-gesture-handler + react-native-reanimated** para el reel
+  vertical de Descubrir.
 - UI en español, sin librerías de componentes externas: los estilos se
   componen con los tokens de `src/constants/theme.ts` (ver "Sistema visual").
 
@@ -49,7 +49,7 @@ fotos son una mejora, no un requisito.
 - Por defecto las subidas están **apagadas**
   (`EXPO_PUBLIC_ENABLE_PHOTO_UPLOADS=false`).
 - Con las fotos apagadas se publica igual: las reglas aceptan publicaciones
-  sin imagen, las tarjetas y el mazo de swipe muestran un marcador de posición
+  sin imagen, las tarjetas y el reel muestran un marcador de posición
   cuidado, y los selectores de foto explican por qué están deshabilitados en
   vez de fallar al tocarlos.
 - Si el proyecto sí tiene Storage, poné `EXPO_PUBLIC_ENABLE_PHOTO_UPLOADS=true`
@@ -69,7 +69,7 @@ src/
     user/[id]            perfil público de otro usuario
     followers/[id], following/[id]
     my-listings, edit-profile, pro-request, rate/[userId]
-  components/           UI compartida (Button, TextField, SwipeDeck, etc.)
+  components/           UI compartida (Button, TextField, DiscoveryReel, etc.)
   constants/            colores, categorías/talles/estados, límites de negocio
   features/             lógica de datos por dominio (auth, users, listings,
                          ratings, discovery, pro, notifications), cada una con
@@ -152,7 +152,7 @@ Pasos concretos para levantar el MVP en un celular, sin build nativo:
 2. Dejá las subidas de fotos apagadas (el default en el archivo de ejemplo). Firebase Storage pide plan Blaze; con las fotos apagadas se publica igual y se ve un marcador de posición. Solo activálas si tu proyecto ya tiene Storage habilitado.
 3. Si vas a probar Google, completá los client IDs web en el archivo de entorno (tipo Web en Google Cloud Console). Los de iOS/Android hacen falta para un build nativo, no para Expo Go. Sin esas variables el botón de Google muestra un aviso en vez de dejar la pantalla en blanco.
 4. Corré `npx expo start` y escaneá el QR: en Android, desde la app Expo Go; en iOS, con la Cámara (abre Expo Go). El login con email y contraseña funciona en Expo Go. El esquema de deep link está en `app.json`.
-5. Recorré el plan de pruebas manual de más abajo: registro, onboarding, Descubrir (swipe), publicar sin fotos, seguir a otra cuenta.
+5. Recorré el plan de pruebas manual de más abajo: registro, onboarding, Descubrir (reel vertical), publicar sin fotos, seguir a otra cuenta.
 
 ### Scripts disponibles
 
@@ -403,7 +403,7 @@ real conectado (dos cuentas de prueba ayudan a probar follow/rating):
     aparecer en "Mis publicaciones" y en Descubrir/Buscar de otras cuentas.
     Con `EXPO_PUBLIC_ENABLE_PHOTO_UPLOADS=false` (el default) la publicación
     tiene que crearse **sin fotos**, mostrando el marcador de posición en la
-    tarjeta, en el mazo de swipe y en el detalle; el selector de fotos tiene
+    tarjeta, en el reel y en el detalle; el selector de fotos tiene
     que explicar por qué está deshabilitado en vez de fallar al tocarlo.
 12. Con las fotos habilitadas, intentar subir una 6ª foto → el selector debe
     bloquear el límite de 5.
@@ -422,16 +422,17 @@ real conectado (dos cuentas de prueba ayudan a probar follow/rating):
     cupo) y después la borra; debe desaparecer de todos lados y el contador
     tiene que quedar bien.
 
-### Descubrimiento (swipe) y feed
+### Descubrimiento (reel vertical) y feed
 
-17. En "Descubrir", deslizar a la derecha (o tocar el corazón) sobre una
-    publicación → debe registrar un "me gusta" (no debe volver a aparecer en
-    la cola) y sumar 1 al `likeCount` de la publicación.
-18. Deslizar a la izquierda (o tocar la X) → debe registrar un "paso" y
-    tampoco volver a aparecer.
-18b. Tocar el corazón dos veces muy rápido, o tocar el botón mientras se
-    arrastra la carta → debe registrarse **una sola** interacción y avanzar
-    una sola carta.
+17. En "Descubrir", tocar el corazón sobre una publicación → debe registrar
+    un "me gusta", sumar 1 al `likeCount` y mantener la publicación visible
+    hasta deslizar hacia arriba.
+18. Deslizar hacia arriba sin haber tocado el corazón → debe registrar un
+    "paso" y mostrar la publicación siguiente. Deslizar hacia abajo permite
+    volver a una publicación anterior de la sesión sin duplicar la interacción.
+18b. Tocar el corazón dos veces muy rápido, o intentar otro gesto mientras se
+    guarda una interacción → debe registrarse **una sola** escritura. Si la
+    escritura falla, el corazón o la posición de la cola deben restaurarse.
 19. Seguir a un vendedor y verificar que sus publicaciones activas aparecen
     en la pestaña "Siguiendo".
 
@@ -480,7 +481,7 @@ real conectado (dos cuentas de prueba ayudan a probar follow/rating):
 27. Buscar algo inexistente con filtros puestos → estado vacío con la acción
     "Limpiar filtros" (distinto del estado "todavía no hay prendas
     publicadas").
-28. Con el lector de pantalla activado, recorrer el mazo de swipe, las
+28. Con el lector de pantalla activado, recorrer el reel vertical, las
     tarjetas y los contadores del perfil → cada control tiene que anunciarse
     con su etiqueta y su estado.
 
