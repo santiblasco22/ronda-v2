@@ -1,14 +1,14 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { DiscoveryReel } from '@/components/DiscoveryReel';
 import { EmptyState, LoadingView } from '@/components/EmptyState';
 import { InlineNotice } from '@/components/FormSection';
 import { Screen } from '@/components/Screen';
-import { ScreenHeader } from '@/components/ScreenHeader';
-import { SwipeDeck } from '@/components/SwipeDeck';
 import { Colors } from '@/constants/colors';
-import { Spacing } from '@/constants/theme';
+import { MIN_TOUCH_TARGET, Radius, Spacing, Typography } from '@/constants/theme';
 import { useDiscoveryQueue, useRecordInteraction } from '@/features/discovery/useDiscovery';
 import type { Listing } from '@/types/models';
 
@@ -16,8 +16,9 @@ export default function DiscoverScreen() {
   const router = useRouter();
   const { data: listings, isLoading, isError, refetch } = useDiscoveryQueue();
   const recordInteraction = useRecordInteraction();
-  const [deckEpoch, setDeckEpoch] = useState(0);
+  const [reelEpoch, setReelEpoch] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const hasReel = !isLoading && !isError && Boolean(listings?.length);
 
   async function handleLike(listing: Listing) {
     await recordInteraction.mutateAsync({ listing, action: 'like' });
@@ -34,8 +35,9 @@ export default function DiscoverScreen() {
     try {
       const result = await refetch();
       if (!result.error) {
-        // Remonta el mazo con el snapshot fresco del servidor (y limpia committed).
-        setDeckEpoch((epoch) => epoch + 1);
+        // Un refresh explícito inicia una nueva sesión local con el snapshot
+        // fresco. Las interacciones normales nunca invalidan esta cola.
+        setReelEpoch((epoch) => epoch + 1);
       }
     } finally {
       setRefreshing(false);
@@ -44,24 +46,7 @@ export default function DiscoverScreen() {
 
   return (
     <Screen padded={false}>
-      <ScreenHeader title="Descubrí" subtitle="Prendas únicas, una por una, sin apuro" />
-      {recordInteraction.isError ? (
-        <View style={styles.errorBanner}>
-          <InlineNotice message="No pudimos guardar tu último swipe. La prenda volvió al mazo para que puedas intentar de nuevo." />
-        </View>
-      ) : null}
-      <ScrollView
-        style={styles.deckArea}
-        contentContainerStyle={styles.deckAreaContent}
-        keyboardShouldPersistTaps="handled"
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => void handleRefresh()}
-            tintColor={Colors.primaryInk}
-          />
-        }
-      >
+      <View style={styles.content}>
         {isLoading ? (
           <LoadingView label="Buscando prendas…" />
         ) : isError ? (
@@ -71,47 +56,108 @@ export default function DiscoverScreen() {
             title="No pudimos cargar publicaciones"
             subtitle="Revisá tu conexión y volvé a intentar."
             actionLabel="Reintentar"
-            onAction={() => refetch()}
+            onAction={() => void handleRefresh()}
           />
         ) : !listings || listings.length === 0 ? (
           <EmptyState
             icon="checkmark-done-outline"
             title="¡Ya viste todo por ahora!"
-            subtitle="Volvé más tarde para descubrir prendas nuevas, o buscá por categoría y talle mientras tanto."
+            subtitle="Actualizá para buscar prendas nuevas, o explorá por categoría y talle."
             actionLabel="Ir a Buscar"
             onAction={() => router.push('/(tabs)/search')}
           />
         ) : (
-          <View style={styles.deckWrap}>
-            <SwipeDeck
-              key={deckEpoch}
-              listings={listings}
-              onLike={handleLike}
-              onPass={handlePass}
-              onOpenListing={handleOpen}
-              isCommitting={recordInteraction.isPending}
-            />
-          </View>
+          <DiscoveryReel
+            key={reelEpoch}
+            listings={listings}
+            onLike={handleLike}
+            onPass={handlePass}
+            onOpenListing={handleOpen}
+            isCommitting={recordInteraction.isPending}
+          />
         )}
-      </ScrollView>
+
+        <View pointerEvents="box-none" style={styles.topBar}>
+          {!hasReel ? <Text style={styles.screenLabel}>RONDA · DESCUBRIR</Text> : <View />}
+          <Pressable
+            onPress={() => void handleRefresh()}
+            disabled={refreshing || recordInteraction.isPending}
+            accessibilityRole="button"
+            accessibilityLabel="Actualizar publicaciones"
+            accessibilityState={{ disabled: refreshing || recordInteraction.isPending }}
+            hitSlop={Spacing.sm}
+            style={({ pressed }) => [
+              styles.refreshButton,
+              hasReel && styles.refreshButtonOverlay,
+              pressed && styles.refreshButtonPressed,
+              (refreshing || recordInteraction.isPending) && styles.refreshButtonDisabled,
+            ]}
+          >
+            {refreshing ? (
+              <ActivityIndicator size="small" color={hasReel ? Colors.white : Colors.primaryInk} />
+            ) : (
+              <Ionicons
+                name="refresh"
+                size={20}
+                color={hasReel ? Colors.white : Colors.primaryInk}
+              />
+            )}
+          </Pressable>
+        </View>
+
+        {recordInteraction.isError ? (
+          <View style={styles.errorBanner}>
+            <InlineNotice message="No pudimos guardar la interacción. Restauramos la prenda para que puedas intentar de nuevo." />
+          </View>
+        ) : null}
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  deckArea: {
+  content: {
     flex: 1,
   },
-  deckAreaContent: {
-    flexGrow: 1,
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.sm,
+  topBar: {
+    position: 'absolute',
+    top: Spacing.md,
+    left: Spacing.md,
+    right: Spacing.md,
+    zIndex: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  deckWrap: {
-    flex: 1,
+  screenLabel: {
+    ...Typography.micro,
+    color: Colors.primaryInk,
+  },
+  refreshButton: {
+    width: MIN_TOUCH_TARGET,
+    height: MIN_TOUCH_TARGET,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  refreshButtonOverlay: {
+    backgroundColor: 'rgba(35,18,31,0.65)',
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  refreshButtonPressed: {
+    transform: [{ scale: 0.92 }],
+  },
+  refreshButtonDisabled: {
+    opacity: 0.55,
   },
   errorBanner: {
-    marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.sm,
+    position: 'absolute',
+    zIndex: 5,
+    top: 64,
+    left: Spacing.md,
+    right: Spacing.md,
   },
 });
